@@ -149,6 +149,9 @@ fn main() {
                 }
             }
         }
+        ("remind", Some(_)) => {
+            print("[sent a reminder]")
+        }
         (missing, Some(_)) => {
             unimplemented!("No implementation for subcommand {}", missing)
         }
