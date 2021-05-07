@@ -6,17 +6,17 @@ use clap::{App, AppSettings, Arg, SubCommand};
 
 #[derive(Serialize, Deserialize, Clone)]
 enum StackEntry {
-    ActiveTask(ActiveTask)
+    Job(ActiveJob)
 }
 
 #[derive(Serialize, Deserialize, Clone)]
-struct ActiveTask {
+struct ActiveJob {
     label: String,
     #[serde(with = "ts_seconds")]
     begin_date: DateTime<Utc>
 }
 
-impl Display for ActiveTask {
+impl Display for ActiveJob {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.label)?;
         f.write_str(" | started at ")?;
@@ -28,7 +28,7 @@ impl Display for ActiveTask {
 }
 
 fn print_stack_empty() {
-    println!("No tasks in progress. Use `wyd push [some arbitrary label]` to start one.");
+    println!("No jobs in progress. Use `wyd push [some arbitrary label]` to start one.");
 }
 
 fn append_to_log(text: &str, app_dir: &Path) {
@@ -51,8 +51,6 @@ fn get_indent<T>(stack: &Vec<T>) -> String {
     }
     output
 }
-
-
 
 fn main() {
     let app_dir = &dirs::data_local_dir()
@@ -81,20 +79,20 @@ fn main() {
     let contents = fs::read_to_string(stack_file_path)
         .expect(&bad_path("Failed to read file {}"));
 
-    let mut task_stack : Vec<StackEntry>;
+    let mut job_stack : Vec<StackEntry>;
     if contents.is_empty() {
-        task_stack = vec![];
+        job_stack = vec![];
     } else {
-        task_stack = ron::from_str(&contents)
+        job_stack = ron::from_str(&contents)
             .expect(&bad_path("Stack file at {} is malformed."))
     }
 
     let save = |t| {
         let new_file_text = ron::to_string(&t)
-            .expect("Attempt to reserialize updated task list failed.");
+            .expect("Attempt to reserialize updated job list failed.");
 
         fs::write(stack_file_path, new_file_text)
-            .expect(&bad_path("Failed to write updated task list to {}"));
+            .expect(&bad_path("Failed to write updated job list to {}"));
     };
 
 
@@ -111,37 +109,37 @@ fn main() {
     
     match matches.subcommand() {
         ("push", Some(m)) => {
-            let indent = get_indent(&task_stack);
+            let indent = get_indent(&job_stack);
             let label = m.values_of("word")
                 .expect("Cannot create an empty entry.")
                 .collect::<Vec<_>>()
                 .join(" ");
-            let task = ActiveTask {
+            let job = ActiveJob {
                 label,
                 begin_date: Utc::now()
             };
             let mut log_line = String::new();
             log_line.push_str(&indent);
-            log_line.push_str(&format!("{}", task));
-            task_stack.push(StackEntry::ActiveTask(task));
-            save(task_stack);
+            log_line.push_str(&format!("{}", job));
+            job_stack.push(StackEntry::Job(job));
+            save(job_stack);
             print(&log_line);     
         }
         ("done", Some(_)) => {
-            match task_stack.pop() {
-                Some(StackEntry::ActiveTask(task)) => {
-                    let duration = Local::now().signed_duration_since(task.begin_date);
+            match job_stack.pop() {
+                Some(StackEntry::Job(job)) => {
+                    let duration = Local::now().signed_duration_since(job.begin_date);
                     let non_negative_dur = Duration::seconds(duration.num_seconds()).to_std().unwrap_or(std::time::Duration::new(0,0));
                     let duration_str = humantime::format_duration(non_negative_dur);
 
                     let log_line = format!(
-                        "{}Completed task \"{}\" (time elapsed: {})",
-                        get_indent(&task_stack),
-                        task.label,
+                        "{}Completed job \"{}\" (time elapsed: {})",
+                        get_indent(&job_stack),
+                        job.label,
                         duration_str
                     );
                     
-                    save(task_stack);
+                    save(job_stack);
                     print(&log_line);
                 }
                 None => {
@@ -156,13 +154,13 @@ fn main() {
             unimplemented!("No implementation for subcommand {}", missing)
         }
         ("", None) => {
-            if task_stack.len() == 0 {
+            if job_stack.len() == 0 {
                 print_stack_empty();
             }
-            for entry in task_stack {
+            for entry in job_stack {
                 match entry {
-                    StackEntry::ActiveTask(task) => {
-                        println!("{}", task);
+                    StackEntry::Job(job) => {
+                        println!("{}", job);
                     }
                 }
             }
