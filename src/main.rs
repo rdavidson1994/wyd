@@ -113,7 +113,7 @@ fn main() {
         ("push", Some(m)) => {
             let indent = get_indent(&task_stack);
             let label = m.values_of("word")
-                .expect("Empty log entry")
+                .expect("Cannot create an empty entry.")
                 .collect::<Vec<_>>()
                 .join(" ");
             let task = ActiveTask {
@@ -150,7 +150,7 @@ fn main() {
             }
         }
         ("remind", Some(_)) => {
-            print("[sent a reminder]")
+            println!("[sent a reminder]")
         }
         (missing, Some(_)) => {
             unimplemented!("No implementation for subcommand {}", missing)
