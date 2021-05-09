@@ -1,22 +1,30 @@
-use std::{fmt::Display, fs::{self, OpenOptions}, io::Write, path::Path};
+use std::{collections::VecDeque, fmt::Display, fs::{self, OpenOptions}, io::Write, path::{PathBuf}};
 use chrono::{DateTime, Duration, Local, Utc, serde::ts_seconds};
 use serde::{Serialize, Deserialize};
 extern crate clap;
-use clap::{App, AppSettings, Arg, SubCommand};
+use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use std::default::Default;
 
 #[derive(Serialize, Deserialize, Clone)]
-enum StackEntry {
-    Job(ActiveJob)
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-struct ActiveJob {
+struct Job {
     label: String,
     #[serde(with = "ts_seconds")]
     begin_date: DateTime<Utc>
 }
 
-impl Display for ActiveJob {
+fn default<D: Default>() -> D {
+    Default::default()
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+struct SuspendedStack {
+    data: JobStack,
+    reason: String,
+    #[serde(with = "ts_seconds")]
+    date_suspended: DateTime<Utc>
+}
+
+impl Display for Job {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.label)?;
         f.write_str(" | started at ")?;
@@ -27,74 +35,157 @@ impl Display for ActiveJob {
     }
 }
 
+
+type JobStack = Vec<Job>;
+
+
+#[derive(Serialize, Deserialize, Clone)]
+struct JobBoard {
+    active_stack : JobStack,
+    suspended_stacks : VecDeque<SuspendedStack>,
+    app_dir: PathBuf
+}
+
+trait StringMatch : FnMut(&str)->bool {
+}
+
+impl<T> StringMatch for T where T : FnMut(&str)->bool {
+
+}
+
+
+impl JobBoard {
+    #[allow(dead_code)]
+    fn empty(app_dir: PathBuf) -> Self {
+        JobBoard {
+            active_stack: default(),
+            suspended_stacks: default(),
+            app_dir
+        }
+    }
+
+
+    
+    fn load(app_dir: PathBuf) -> Self {
+        let stack_file_path = app_dir.join("jobs.ron");
+        let bad_path = |s: &str| {
+            s.replace("{}",&format!("{:?}",&stack_file_path))
+        };
+        OpenOptions::new().create(true).read(true).write(true).open(&stack_file_path)
+            .expect(&bad_path("Failed to open or create file {}"));
+        let contents = fs::read_to_string(&stack_file_path)
+            .expect(&bad_path("Failed to read file {}"));
+        let (active_stack, suspended_stacks) = if contents.is_empty() {
+            default()
+        } else {
+            ron::from_str(&contents)
+                .expect(&bad_path("Stack file at {} is malformed."))
+        };
+        JobBoard {
+            app_dir,
+            active_stack,
+            suspended_stacks
+        }
+    }
+
+    fn find_job(&self, mut predicate: impl StringMatch) -> Option<(usize, &Job)> {
+        for (index, job) in self.active_stack.iter().enumerate() {
+            if predicate(&job.label) {
+                return Some((index,job))
+            }
+        }
+        None
+    }
+
+    fn suspend_at(&mut self, index: usize, reason: String) -> Result<(),()> {
+        if index >= self.active_stack.len() {
+            return Err(())
+        }
+        let jobs_to_suspend = self.active_stack.split_off(index);
+        let suspended_stack = SuspendedStack {
+            data: jobs_to_suspend,
+            reason,
+            date_suspended: Utc::now(),
+        };
+        self.suspended_stacks.push_back(suspended_stack);
+        Ok(())
+    }
+
+    fn suspend_matching(&mut self, pattern: impl StringMatch, reason: String) -> Result<(),()> {
+        if let Some((i, _job)) = self.find_job(pattern) {
+            self.suspend_at(i, reason)
+        } else {
+            Err(())
+        }
+    }
+
+    fn save(self) {
+        let new_file_text = ron::to_string(&(self.active_stack, self.suspended_stacks))
+            .expect("Attempt to reserialize updated job list failed.");
+        fs::write(self.app_dir.join("jobs.ron"), new_file_text)
+            .expect("Failed to write updated job list.");
+    }
+
+    fn append_to_log(&self, text: &str) {
+        let date = Local::now();
+        let log_file_name = format!("{}",date.format("wyd-%F.log"));
+        let log_path = self.app_dir.join(log_file_name);
+        
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .expect(&format!("Failed to open log file at {:?}", log_path));
+        file.write(text.as_bytes())
+            .expect(&format!("Failed to write to log file at {:?}", log_path));
+    }
+
+    fn push(&mut self, job: Job) {
+        self.active_stack.push(job);
+    }
+
+    fn pop(&mut self) -> Option<Job> {
+        self.active_stack.pop()
+    }
+
+    fn num_active_jobs(&self) -> usize {
+        self.active_stack.len()
+    }
+
+    fn get_indent(&self) -> String {
+        let mut output = String::new();
+        for _ in 0..self.num_active_jobs() {
+            output.push(' ');
+        }
+        output
+    }
+
+    fn print(&self, message: &str) {
+        self.append_to_log(&(message.to_owned() + "\n"));
+        println!("{}",message.trim());
+    }
+}
+
+
 fn print_stack_empty() {
     println!("No jobs in progress. Use `wyd push [some arbitrary label]` to start one.");
 }
 
-fn append_to_log(text: &str, app_dir: &Path) {
-    let date = Local::now();
-    let log_file_name = format!("{}",date.format("wyd-%F.log"));
-    let log_path = app_dir.join(log_file_name);
-    let mut file = OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .expect(&format!("Failed to open log file at {:?}", log_path));
-    file.write(text.as_bytes())
-        .expect(&format!("Failed to write to log file at {:?}", log_path));
-}
-
-fn get_indent<T>(stack: &Vec<T>) -> String {
-    let mut output = String::new();
-    for _ in 0..stack.len() {
-        output.push(' ');
-    }
-    output
+fn word_args_to_string(args: &ArgMatches) -> String {
+    args.values_of("word")
+        .expect("Cannot create an empty entry.")
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn main() {
-    let app_dir = &dirs::data_local_dir()
+    let app_dir = dirs::data_local_dir()
         .expect("Could not locate current user's app data folder.")
         .join(".wyd");
 
-    let stack_file_path = &app_dir.join("stack.ron");
-
-    let bad_path = |s: &str| {
-        s.replace("{}",&format!("{:?}",stack_file_path))
-    };
-
-    let print = |s: &str| {
-        append_to_log(&(s.to_owned() + "\n"), app_dir);
-        println!("{}",s.trim());
-    };
-
-    fs::create_dir_all(app_dir)
-        .expect(&bad_path("Attempted to create {}, but directory creation failed."));
-    
-
-    OpenOptions::new().create(true).read(true).write(true).open(stack_file_path)
-        .expect(&bad_path("Failed to open or create file {}"));
-    
-
-    let contents = fs::read_to_string(stack_file_path)
-        .expect(&bad_path("Failed to read file {}"));
-
-    let mut job_stack : Vec<StackEntry>;
-    if contents.is_empty() {
-        job_stack = vec![];
-    } else {
-        job_stack = ron::from_str(&contents)
-            .expect(&bad_path("Stack file at {} is malformed."))
-    }
-
-    let save = |t| {
-        let new_file_text = ron::to_string(&t)
-            .expect("Attempt to reserialize updated job list failed.");
-
-        fs::write(stack_file_path, new_file_text)
-            .expect(&bad_path("Failed to write updated job list to {}"));
-    };
-
+    fs::create_dir_all(&app_dir)
+        .expect("Could not create application directory");
+    let mut job_board = JobBoard::load(app_dir);
 
     let matches = App::new("What're You Doing")
         .settings(&[AppSettings::InferSubcommands])
@@ -105,42 +196,64 @@ fn main() {
         )
         .subcommand(SubCommand::with_name("done"))
         .subcommand(SubCommand::with_name("remind"))
+        .subcommand(
+            SubCommand::with_name("suspend")
+                .arg(Arg::with_name("pattern")
+                    .required(true)
+                    .takes_value(true)
+                )
+                .arg(Arg::with_name("reason")
+                    .required(true)
+                    .takes_value(true)
+                )
+        )
         .get_matches();
     
     match matches.subcommand() {
         ("push", Some(m)) => {
-            let indent = get_indent(&job_stack);
-            let label = m.values_of("word")
-                .expect("Cannot create an empty entry.")
-                .collect::<Vec<_>>()
-                .join(" ");
-            let job = ActiveJob {
+            let indent = job_board.get_indent();
+            let label = word_args_to_string(m);
+            let job = Job {
                 label,
                 begin_date: Utc::now()
             };
             let mut log_line = String::new();
             log_line.push_str(&indent);
             log_line.push_str(&format!("{}", job));
-            job_stack.push(StackEntry::Job(job));
-            save(job_stack);
-            print(&log_line);     
+            job_board.push(job);
+            job_board.print(&log_line);     
+            job_board.save();
+        }
+        ("suspend", Some(m)) => {
+            let pattern = m.value_of("pattern").expect("Mandatory argument").to_owned();
+            let reason = m.value_of("reason").expect("Mandatory argument").to_owned();
+
+            let matcher = |s: &str| {
+                s.contains(&pattern)
+            };
+
+            if job_board.suspend_matching(matcher, reason).is_ok() {
+                println!("Job uspended.");
+            } else {
+                println!("No matching job to suspend.")
+            }
+            job_board.save();
         }
         ("done", Some(_)) => {
-            match job_stack.pop() {
-                Some(StackEntry::Job(job)) => {
+            match job_board.pop() {
+                Some(job) => {
                     let duration = Local::now().signed_duration_since(job.begin_date);
                     let non_negative_dur = Duration::seconds(duration.num_seconds()).to_std().unwrap_or(std::time::Duration::new(0,0));
                     let duration_str = humantime::format_duration(non_negative_dur);
 
                     let log_line = format!(
                         "{}Completed job \"{}\" (time elapsed: {})",
-                        get_indent(&job_stack),
+                        job_board.get_indent(),
                         job.label,
                         duration_str
                     );
-                    
-                    save(job_stack);
-                    print(&log_line);
+                    job_board.print(&log_line);
+                    job_board.save();
                 }
                 None => {
                     print_stack_empty();
@@ -154,15 +267,11 @@ fn main() {
             unimplemented!("No implementation for subcommand {}", missing)
         }
         ("", None) => {
-            if job_stack.len() == 0 {
+            if job_board.num_active_jobs() == 0 {
                 print_stack_empty();
             }
-            for entry in job_stack {
-                match entry {
-                    StackEntry::Job(job) => {
-                        println!("{}", job);
-                    }
-                }
+            for job in job_board.active_stack {
+                println!("{}",job);
             }
 
         }
