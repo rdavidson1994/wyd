@@ -118,6 +118,26 @@ impl JobBoard {
         }
     }
 
+    fn resume_matching(&mut self, mut pattern: impl StringMatch) -> Result<(), ()> {
+        let mut found_index = self.suspended_stacks.len();
+        for (i, stack) in self.suspended_stacks.iter().enumerate() {
+            if pattern(&stack.data[0].label) {
+                found_index = i;
+                break;
+            }
+        }
+        match self.suspended_stacks.remove(found_index) {
+            Some(mut suspended_stack) => {
+                for mut job in &mut suspended_stack.data {
+                    job.begin_date = Utc::now();
+                }
+                self.active_stack.extend(suspended_stack.data);
+                Ok(())
+            }
+            None => Err(()),
+        }
+    }
+
     fn save(self) {
         let new_file_text = ron::to_string(&(self.active_stack, self.suspended_stacks))
             .expect("Attempt to reserialize updated job list failed.");
@@ -176,8 +196,8 @@ fn word_args_to_string(args: &ArgMatches) -> String {
         .join(" ")
 }
 
-fn substring_matcher(pattern: & str) -> impl Fn(& str) -> bool + '_ {
-    move |s: &str| -> bool {s.contains(pattern)}
+fn substring_matcher(pattern: &str) -> impl Fn(&str) -> bool + '_ {
+    move |s: &str| -> bool { s.contains(pattern) }
 }
 
 fn main() {
@@ -275,11 +295,11 @@ fn main() {
                 .to_owned();
             let matcher = substring_matcher(&pattern);
 
-            // if job_board.resume_matching(matcher).is_ok() {
-            //     println!("Job resumed.");
-            // } else {
-            //     println!("No matching job to resume.")
-            // }
+            if job_board.resume_matching(matcher).is_ok() {
+                println!("Job resumed.");
+            } else {
+                println!("No matching job to resume.")
+            }
             job_board.save();
         }
         ("remind", Some(_)) => {
