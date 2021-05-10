@@ -176,6 +176,10 @@ fn word_args_to_string(args: &ArgMatches) -> String {
         .join(" ")
 }
 
+fn substring_matcher(pattern: & str) -> impl Fn(& str) -> bool + '_ {
+    move |s: &str| -> bool {s.contains(pattern)}
+}
+
 fn main() {
     let app_dir = dirs::data_local_dir()
         .expect("Could not locate current user's app data folder.")
@@ -234,7 +238,7 @@ fn main() {
                 .to_owned();
             let reason = m.value_of("reason").expect("Mandatory argument").to_owned();
 
-            let matcher = |s: &str| s.contains(&pattern);
+            let matcher = substring_matcher(&pattern);
 
             if job_board.suspend_matching(matcher, reason).is_ok() {
                 println!("Job uspended.");
@@ -264,7 +268,20 @@ fn main() {
                 print_stack_empty();
             }
         },
+        ("resume", Some(m)) => {
+            let pattern = m
+                .value_of("pattern")
+                .expect("Mandatory argument")
+                .to_owned();
+            let matcher = substring_matcher(&pattern);
 
+            // if job_board.resume_matching(matcher).is_ok() {
+            //     println!("Job resumed.");
+            // } else {
+            //     println!("No matching job to resume.")
+            // }
+            job_board.save();
+        }
         ("remind", Some(_)) => {
             println!("[sent a reminder]")
         }
