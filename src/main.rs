@@ -196,13 +196,23 @@ fn main() {
         )
         .subcommand(SubCommand::with_name("done"))
         .subcommand(SubCommand::with_name("remind"))
+        .subcommand(SubCommand::with_name("resume")
+            .arg(Arg::with_name("pattern")
+                .required(true)
+                .takes_value(true)
+            )
+        )
         .subcommand(
             SubCommand::with_name("suspend")
                 .arg(Arg::with_name("pattern")
                     .required(true)
+                    .long("pattern")
+                    .short("p")
                     .takes_value(true)
                 )
                 .arg(Arg::with_name("reason")
+                    .long("reason")
+                    .short("r")
                     .required(true)
                     .takes_value(true)
                 )
@@ -260,6 +270,7 @@ fn main() {
                 }
             }
         }
+        
         ("remind", Some(_)) => {
             println!("[sent a reminder]")
         }
