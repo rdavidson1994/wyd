@@ -188,6 +188,17 @@ impl JobBoard {
         println!("{}", message.trim());
     }
 
+    fn get_summary(&self) -> String {
+        if self.num_active_jobs() == 0 {
+            format!("{}", self.empty_stack_message())
+        } else {
+            self.active_stack
+                .iter()
+                .map(|job| format!("{}\n", job))
+                .collect()
+        }
+    }
+
     fn empty_stack_message(&self) -> String {
         let mut output = String::new();
         if self.suspended_stacks.len() > 0 {
@@ -197,24 +208,24 @@ impl JobBoard {
                     if i == 0 {
                         output.push_str(&job.label);
                         output.push_str(" (suspended at ");
-                        output.push_str(&format!("{}", DateTime::<Local>::from(stack.date_suspended).format("%r")));
+                        output.push_str(&format!(
+                            "{}",
+                            DateTime::<Local>::from(stack.date_suspended).format("%r")
+                        ));
                         output.push_str(")");
-                    }
-                    else {
+                    } else {
                         output.push_str("    ");
                         output.push_str(&job.label);
                     }
                     output.push('\n');
                 }
             }
-        }
-        else {
+        } else {
             output.push_str("No jobs in progress, and no suspended tasks! Use `wyd push [some arbitrary label]` to start a new task.")
         }
         output
     }
 }
-
 
 fn word_args_to_string(args: &ArgMatches) -> String {
     args.values_of("word")
@@ -322,6 +333,7 @@ fn main() {
                     duration_str
                 );
                 job_board.print(&log_line);
+                println!("{}", job_board.get_summary());
                 job_board.save();
             }
             None => {
@@ -348,12 +360,7 @@ fn main() {
             unimplemented!("No implementation for subcommand {}", missing)
         }
         ("", None) => {
-            if job_board.num_active_jobs() == 0 {
-                print!("{}", job_board.empty_stack_message())
-            }
-            for job in job_board.active_stack {
-                println!("{}", job);
-            }
+            println!("{}", job_board.get_summary());
         }
         (invalid, None) => {
             panic!("Invalid subcommand {}", invalid)
