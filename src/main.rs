@@ -210,7 +210,16 @@ fn main() {
 
     let matches = App::new("What're You Doing")
         .settings(&[AppSettings::InferSubcommands])
-        .subcommand(SubCommand::with_name("push").arg(Arg::with_name("word").multiple(true)))
+        .subcommand(
+            SubCommand::with_name("push")
+                .arg(
+                    Arg::with_name("timebox")
+                        .long("timebox")
+                        .short("t")
+                        .takes_value(true),
+                )
+                .arg(Arg::with_name("word").multiple(true)),
+        )
         .subcommand(SubCommand::with_name("done"))
         .subcommand(SubCommand::with_name("remind"))
         .subcommand(
