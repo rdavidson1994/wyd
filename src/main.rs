@@ -126,7 +126,11 @@ impl JobBoard {
                 break;
             }
         }
-        match self.suspended_stacks.remove(found_index) {
+        self.resume_at_index(found_index)
+    }
+
+    fn resume_at_index(&mut self, index: usize) -> Result<(), ()> {
+        match self.suspended_stacks.remove(index) {
             Some(mut suspended_stack) => {
                 for mut job in &mut suspended_stack.data {
                     job.begin_date = Utc::now();
@@ -223,8 +227,12 @@ fn main() {
         .subcommand(SubCommand::with_name("done"))
         .subcommand(SubCommand::with_name("remind"))
         .subcommand(
-            SubCommand::with_name("resume")
-                .arg(Arg::with_name("pattern").required(true).takes_value(true)),
+            SubCommand::with_name("resume").arg(
+                Arg::with_name("pattern")
+                    .long("pattern")
+                    .short("p")
+                    .takes_value(true),
+            ),
         )
         .subcommand(
             SubCommand::with_name("suspend")
@@ -298,16 +306,15 @@ fn main() {
             }
         },
         ("resume", Some(m)) => {
-            let pattern = m
-                .value_of("pattern")
-                .expect("Mandatory argument")
-                .to_owned();
-            let matcher = substring_matcher(&pattern);
+            let outcome = match m.value_of("pattern") {
+                Some(pattern) => job_board.resume_matching(substring_matcher(&pattern)),
+                None => job_board.resume_at_index(0),
+            };
 
-            if job_board.resume_matching(matcher).is_ok() {
-                println!("Job resumed.");
+            if outcome.is_ok() {
+                println!("Job resumed: {}", job_board.active_stack[0]);
             } else {
-                println!("No matching job to resume.")
+                println!("No matching job to resume.");
             }
             job_board.save();
         }
