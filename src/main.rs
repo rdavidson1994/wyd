@@ -333,7 +333,11 @@ fn main() {
                     duration_str
                 );
                 job_board.print(&log_line);
-                println!("{}", job_board.get_summary());
+                if let Some(new_job) = job_board.active_stack.last() {
+                    println!("{}", new_job)
+                } else {
+                    print!("{}", job_board.get_summary())
+                }
                 job_board.save();
             }
             None => {
@@ -360,7 +364,7 @@ fn main() {
             unimplemented!("No implementation for subcommand {}", missing)
         }
         ("", None) => {
-            println!("{}", job_board.get_summary());
+            print!("{}", job_board.get_summary());
         }
         (invalid, None) => {
             panic!("Invalid subcommand {}", invalid)
