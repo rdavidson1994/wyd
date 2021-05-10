@@ -16,6 +16,7 @@ struct Job {
     label: String,
     #[serde(with = "ts_seconds")]
     begin_date: DateTime<Utc>,
+    timebox: Option<std::time::Duration>,
 }
 
 fn default<D: Default>() -> D {
@@ -159,6 +160,7 @@ impl JobBoard {
             .append(true)
             .open(&log_path)
             .expect(&format!("Failed to open log file at {:?}", log_path));
+
         file.write(text.as_bytes())
             .expect(&format!("Failed to write to log file at {:?}", log_path));
     }
@@ -291,9 +293,18 @@ fn main() {
         ("push", Some(m)) => {
             let indent = job_board.get_indent();
             let label = word_args_to_string(m);
+            let timebox = match m.value_of("timebox") {
+                Some(string) => {
+                    let dur = humantime::parse_duration(string).expect("Invalid timebox value.");
+                    Some(dur)
+                }
+                None => None,
+            };
+
             let job = Job {
                 label,
                 begin_date: Utc::now(),
+                timebox,
             };
             let mut log_line = String::new();
             log_line.push_str(&indent);
