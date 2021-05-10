@@ -9,6 +9,7 @@ use std::{
 };
 extern crate clap;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use ron::ser::{self, PrettyConfig};
 use std::default::Default;
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -144,8 +145,11 @@ impl JobBoard {
     }
 
     fn save(self) {
-        let new_file_text = ron::to_string(&(self.active_stack, self.suspended_stacks))
-            .expect("Attempt to reserialize updated job list failed.");
+        let new_file_text = ser::to_string_pretty(
+            &(self.active_stack, self.suspended_stacks),
+            PrettyConfig::new(),
+        )
+        .expect("Attempt to reserialize updated job list failed.");
         fs::write(self.app_dir.join("jobs.ron"), new_file_text)
             .expect("Failed to write updated job list.");
     }
