@@ -1,6 +1,12 @@
-use std::{collections::VecDeque, fmt::Display, fs::{self, OpenOptions}, io::Write, path::{PathBuf}};
-use chrono::{DateTime, Duration, Local, Utc, serde::ts_seconds};
-use serde::{Serialize, Deserialize};
+use chrono::{serde::ts_seconds, DateTime, Duration, Local, Utc};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::VecDeque,
+    fmt::Display,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::PathBuf,
+};
 extern crate clap;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use std::default::Default;
@@ -9,7 +15,7 @@ use std::default::Default;
 struct Job {
     label: String,
     #[serde(with = "ts_seconds")]
-    begin_date: DateTime<Utc>
+    begin_date: DateTime<Utc>,
 }
 
 fn default<D: Default>() -> D {
@@ -21,7 +27,7 @@ struct SuspendedStack {
     data: JobStack,
     reason: String,
     #[serde(with = "ts_seconds")]
-    date_suspended: DateTime<Utc>
+    date_suspended: DateTime<Utc>,
 }
 
 impl Display for Job {
@@ -35,24 +41,18 @@ impl Display for Job {
     }
 }
 
-
 type JobStack = Vec<Job>;
-
 
 #[derive(Serialize, Deserialize, Clone)]
 struct JobBoard {
-    active_stack : JobStack,
-    suspended_stacks : VecDeque<SuspendedStack>,
-    app_dir: PathBuf
+    active_stack: JobStack,
+    suspended_stacks: VecDeque<SuspendedStack>,
+    app_dir: PathBuf,
 }
 
-trait StringMatch : FnMut(&str)->bool {
-}
+trait StringMatch: FnMut(&str) -> bool {}
 
-impl<T> StringMatch for T where T : FnMut(&str)->bool {
-
-}
-
+impl<T> StringMatch for T where T: FnMut(&str) -> bool {}
 
 impl JobBoard {
     #[allow(dead_code)]
@@ -60,46 +60,45 @@ impl JobBoard {
         JobBoard {
             active_stack: default(),
             suspended_stacks: default(),
-            app_dir
+            app_dir,
         }
     }
 
-
-    
     fn load(app_dir: PathBuf) -> Self {
         let stack_file_path = app_dir.join("jobs.ron");
-        let bad_path = |s: &str| {
-            s.replace("{}",&format!("{:?}",&stack_file_path))
-        };
-        OpenOptions::new().create(true).read(true).write(true).open(&stack_file_path)
+        let bad_path = |s: &str| s.replace("{}", &format!("{:?}", &stack_file_path));
+        OpenOptions::new()
+            .create(true)
+            .read(true)
+            .write(true)
+            .open(&stack_file_path)
             .expect(&bad_path("Failed to open or create file {}"));
-        let contents = fs::read_to_string(&stack_file_path)
-            .expect(&bad_path("Failed to read file {}"));
+        let contents =
+            fs::read_to_string(&stack_file_path).expect(&bad_path("Failed to read file {}"));
         let (active_stack, suspended_stacks) = if contents.is_empty() {
             default()
         } else {
-            ron::from_str(&contents)
-                .expect(&bad_path("Stack file at {} is malformed."))
+            ron::from_str(&contents).expect(&bad_path("Stack file at {} is malformed."))
         };
         JobBoard {
             app_dir,
             active_stack,
-            suspended_stacks
+            suspended_stacks,
         }
     }
 
     fn find_job(&self, mut predicate: impl StringMatch) -> Option<(usize, &Job)> {
         for (index, job) in self.active_stack.iter().enumerate() {
             if predicate(&job.label) {
-                return Some((index,job))
+                return Some((index, job));
             }
         }
         None
     }
 
-    fn suspend_at(&mut self, index: usize, reason: String) -> Result<(),()> {
+    fn suspend_at(&mut self, index: usize, reason: String) -> Result<(), ()> {
         if index >= self.active_stack.len() {
-            return Err(())
+            return Err(());
         }
         let jobs_to_suspend = self.active_stack.split_off(index);
         let suspended_stack = SuspendedStack {
@@ -111,7 +110,7 @@ impl JobBoard {
         Ok(())
     }
 
-    fn suspend_matching(&mut self, pattern: impl StringMatch, reason: String) -> Result<(),()> {
+    fn suspend_matching(&mut self, pattern: impl StringMatch, reason: String) -> Result<(), ()> {
         if let Some((i, _job)) = self.find_job(pattern) {
             self.suspend_at(i, reason)
         } else {
@@ -128,9 +127,9 @@ impl JobBoard {
 
     fn append_to_log(&self, text: &str) {
         let date = Local::now();
-        let log_file_name = format!("{}",date.format("wyd-%F.log"));
+        let log_file_name = format!("{}", date.format("wyd-%F.log"));
         let log_path = self.app_dir.join(log_file_name);
-        
+
         let mut file = OpenOptions::new()
             .create(true)
             .append(true)
@@ -162,10 +161,9 @@ impl JobBoard {
 
     fn print(&self, message: &str) {
         self.append_to_log(&(message.to_owned() + "\n"));
-        println!("{}",message.trim());
+        println!("{}", message.trim());
     }
 }
-
 
 fn print_stack_empty() {
     println!("No jobs in progress. Use `wyd push [some arbitrary label]` to start one.");
@@ -183,64 +181,60 @@ fn main() {
         .expect("Could not locate current user's app data folder.")
         .join(".wyd");
 
-    fs::create_dir_all(&app_dir)
-        .expect("Could not create application directory");
+    fs::create_dir_all(&app_dir).expect("Could not create application directory");
     let mut job_board = JobBoard::load(app_dir);
 
     let matches = App::new("What're You Doing")
         .settings(&[AppSettings::InferSubcommands])
-        .subcommand(SubCommand::with_name("push")
-            .arg(Arg::with_name("word")
-                .multiple(true)
-            )
-        )
+        .subcommand(SubCommand::with_name("push").arg(Arg::with_name("word").multiple(true)))
         .subcommand(SubCommand::with_name("done"))
         .subcommand(SubCommand::with_name("remind"))
-        .subcommand(SubCommand::with_name("resume")
-            .arg(Arg::with_name("pattern")
-                .required(true)
-                .takes_value(true)
-            )
+        .subcommand(
+            SubCommand::with_name("resume")
+                .arg(Arg::with_name("pattern").required(true).takes_value(true)),
         )
         .subcommand(
             SubCommand::with_name("suspend")
-                .arg(Arg::with_name("pattern")
-                    .required(true)
-                    .long("pattern")
-                    .short("p")
-                    .takes_value(true)
+                .arg(
+                    Arg::with_name("pattern")
+                        .required(true)
+                        .long("pattern")
+                        .short("p")
+                        .takes_value(true),
                 )
-                .arg(Arg::with_name("reason")
-                    .long("reason")
-                    .short("r")
-                    .required(true)
-                    .takes_value(true)
-                )
+                .arg(
+                    Arg::with_name("reason")
+                        .long("reason")
+                        .short("r")
+                        .required(true)
+                        .takes_value(true),
+                ),
         )
         .get_matches();
-    
+
     match matches.subcommand() {
         ("push", Some(m)) => {
             let indent = job_board.get_indent();
             let label = word_args_to_string(m);
             let job = Job {
                 label,
-                begin_date: Utc::now()
+                begin_date: Utc::now(),
             };
             let mut log_line = String::new();
             log_line.push_str(&indent);
             log_line.push_str(&format!("{}", job));
             job_board.push(job);
-            job_board.print(&log_line);     
+            job_board.print(&log_line);
             job_board.save();
         }
         ("suspend", Some(m)) => {
-            let pattern = m.value_of("pattern").expect("Mandatory argument").to_owned();
+            let pattern = m
+                .value_of("pattern")
+                .expect("Mandatory argument")
+                .to_owned();
             let reason = m.value_of("reason").expect("Mandatory argument").to_owned();
 
-            let matcher = |s: &str| {
-                s.contains(&pattern)
-            };
+            let matcher = |s: &str| s.contains(&pattern);
 
             if job_board.suspend_matching(matcher, reason).is_ok() {
                 println!("Job uspended.");
@@ -249,28 +243,28 @@ fn main() {
             }
             job_board.save();
         }
-        ("done", Some(_)) => {
-            match job_board.pop() {
-                Some(job) => {
-                    let duration = Local::now().signed_duration_since(job.begin_date);
-                    let non_negative_dur = Duration::seconds(duration.num_seconds()).to_std().unwrap_or(std::time::Duration::new(0,0));
-                    let duration_str = humantime::format_duration(non_negative_dur);
+        ("done", Some(_)) => match job_board.pop() {
+            Some(job) => {
+                let duration = Local::now().signed_duration_since(job.begin_date);
+                let non_negative_dur = Duration::seconds(duration.num_seconds())
+                    .to_std()
+                    .unwrap_or(std::time::Duration::new(0, 0));
+                let duration_str = humantime::format_duration(non_negative_dur);
 
-                    let log_line = format!(
-                        "{}Completed job \"{}\" (time elapsed: {})",
-                        job_board.get_indent(),
-                        job.label,
-                        duration_str
-                    );
-                    job_board.print(&log_line);
-                    job_board.save();
-                }
-                None => {
-                    print_stack_empty();
-                }
+                let log_line = format!(
+                    "{}Completed job \"{}\" (time elapsed: {})",
+                    job_board.get_indent(),
+                    job.label,
+                    duration_str
+                );
+                job_board.print(&log_line);
+                job_board.save();
             }
-        }
-        
+            None => {
+                print_stack_empty();
+            }
+        },
+
         ("remind", Some(_)) => {
             println!("[sent a reminder]")
         }
@@ -282,9 +276,8 @@ fn main() {
                 print_stack_empty();
             }
             for job in job_board.active_stack {
-                println!("{}",job);
+                println!("{}", job);
             }
-
         }
         (invalid, None) => {
             panic!("Invalid subcommand {}", invalid)
