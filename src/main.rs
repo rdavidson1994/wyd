@@ -270,7 +270,7 @@ fn main() {
             let matcher = substring_matcher(&pattern);
 
             if job_board.suspend_matching(matcher, reason).is_ok() {
-                println!("Job uspended.");
+                println!("Job suspended.");
             } else {
                 println!("No matching job to suspend.")
             }
