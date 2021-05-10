@@ -187,11 +187,34 @@ impl JobBoard {
         self.append_to_log(&(message.to_owned() + "\n"));
         println!("{}", message.trim());
     }
+
+    fn empty_stack_message(&self) -> String {
+        let mut output = String::new();
+        if self.suspended_stacks.len() > 0 {
+            output.push_str("You finished your jobs in progress. Yay! Use `wyd resume` to resume the topmost suspended task:\n");
+            for stack in &self.suspended_stacks {
+                for (i, job) in stack.data.iter().enumerate() {
+                    if i == 0 {
+                        output.push_str(&job.label);
+                        output.push_str(" (suspended at ");
+                        output.push_str(&format!("{}", DateTime::<Local>::from(stack.date_suspended).format("%r")));
+                        output.push_str(")");
+                    }
+                    else {
+                        output.push_str("    ");
+                        output.push_str(&job.label);
+                    }
+                    output.push('\n');
+                }
+            }
+        }
+        else {
+            output.push_str("No jobs in progress, and no suspended tasks! Use `wyd push [some arbitrary label]` to start a new task.")
+        }
+        output
+    }
 }
 
-fn print_stack_empty() {
-    println!("No jobs in progress. Use `wyd push [some arbitrary label]` to start one.");
-}
 
 fn word_args_to_string(args: &ArgMatches) -> String {
     args.values_of("word")
@@ -302,7 +325,7 @@ fn main() {
                 job_board.save();
             }
             None => {
-                print_stack_empty();
+                print!("{}", job_board.empty_stack_message())
             }
         },
         ("resume", Some(m)) => {
@@ -326,7 +349,7 @@ fn main() {
         }
         ("", None) => {
             if job_board.num_active_jobs() == 0 {
-                print_stack_empty();
+                print!("{}", job_board.empty_stack_message())
             }
             for job in job_board.active_stack {
                 println!("{}", job);
