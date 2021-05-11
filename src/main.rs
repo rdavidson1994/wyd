@@ -11,13 +11,38 @@ extern crate clap;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use ron::ser::{self, PrettyConfig};
 use std::default::Default;
+use std::time::Duration as StdDuration;
+
+const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Job {
     label: String,
     #[serde(with = "ts_seconds")]
     begin_date: DateTime<Utc>,
-    timebox: Option<std::time::Duration>,
+    timebox: Option<StdDuration>,
+    last_notifiaction: Option<DateTime<Utc>>,
+}
+
+impl Job {
+    fn timebox_remaining(&self) -> Option<StdDuration> {
+        match self.timebox {
+            Some(timebox) => {
+                let dur_result = (self.begin_date
+                    + Duration::from_std(timebox).expect("Duration out of range.")
+                    - Utc::now())
+                .to_std();
+                match dur_result {
+                    Ok(dur) => Some(dur),
+                    Err(_) => Some(StdDuration::new(0, 0)),
+                }
+            }
+            None => None,
+        }
+    }
+    fn timebox_expired(&self) -> bool {
+        self.timebox_remaining() == Some(StdDuration::new(0, 0))
+    }
 }
 
 fn default<D: Default>() -> D {
@@ -315,6 +340,7 @@ fn main() {
                 label,
                 begin_date: Utc::now(),
                 timebox,
+                last_notifiaction: None,
             };
             app.add_job(job);
             app.save();
@@ -340,7 +366,7 @@ fn main() {
                 let duration = Local::now().signed_duration_since(job.begin_date);
                 let non_negative_dur = Duration::seconds(duration.num_seconds())
                     .to_std()
-                    .unwrap_or(std::time::Duration::new(0, 0));
+                    .unwrap_or(StdDuration::new(0, 0));
                 let duration_str = humantime::format_duration(non_negative_dur);
 
                 let log_line = format!(
@@ -375,35 +401,24 @@ fn main() {
             app.save();
         }
         ("remind", Some(_)) => {
-            let mut min_remaining_timebox = None;
-            for job in app.job_board.active_stack {
-                if let Some(timebox) = job.timebox {
-                    let time_elapsed = Utc::now().signed_duration_since(job.begin_date);
-                    let timebox_duration =
-                        Duration::from_std(timebox).expect("invalid timebox duration");
-                    let time_remaining = (timebox_duration - time_elapsed)
-                        .to_std()
-                        .unwrap_or(std::time::Duration::new(0, 0));
-
-                    if time_remaining <= std::time::Duration::new(0, 0) {
-                        println!("VERY LOUD REMINDER ABOUT AN EXPIRING TIMEBOX! :D");
-                        println!("This is the job that expired: {}", job);
-                        // job.timebox = None;
-                    } else {
-                        min_remaining_timebox = match min_remaining_timebox {
-                            Some(min_duration) => Some(std::cmp::min(time_remaining, min_duration)),
-                            None => Some(time_remaining),
+            for mut job in &mut app.job_board.active_stack {
+                if job.timebox_expired() {
+                    let should_notify = match job.last_notifiaction {
+                        Some(notification_date) => {
+                            Utc::now()
+                                .signed_duration_since(notification_date)
+                                .num_seconds()
+                                > MIN_NOTIFICATION_DELAY_SECONDS
                         }
+                        None => true,
+                    };
+                    if should_notify {
+                        println!("GIANT ANNOYING NOTIFACTION ABOUT EXPIRING TIMEBOX :D \n This timebox expired: {}", job);
+                        job.last_notifiaction = Some(Utc::now());
                     }
                 }
             }
-
-            if let Some(min_remaining_timebox) = min_remaining_timebox {
-                println!("{:?}", min_remaining_timebox);
-                std::thread::sleep(min_remaining_timebox);
-            } else {
-                println!("No min timebox")
-            }
+            app.save();
         }
         (missing, Some(_)) => {
             unimplemented!("No implementation for subcommand {}", missing)
