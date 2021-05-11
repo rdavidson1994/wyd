@@ -78,7 +78,7 @@ type JobStack = Vec<Job>;
 struct WydApplication {
     job_board: JobBoard,
     app_dir: PathBuf,
-    icon_url: Url
+    icon_url: Url,
 }
 
 impl WydApplication {
@@ -91,11 +91,12 @@ impl WydApplication {
 
     fn load(app_dir: PathBuf) -> WydApplication {
         let job_board = JobBoard::load(&app_dir);
-        let icon_url = Url::from_file_path(app_dir.join("wyd-icon.png")).expect("Unable to load icon");
+        let icon_url =
+            Url::from_file_path(app_dir.join("wyd-icon.png")).expect("Unable to load icon");
         WydApplication {
             app_dir,
             job_board,
-            icon_url
+            icon_url,
         }
     }
 
@@ -413,7 +414,7 @@ fn main() {
                         .short("t")
                         .takes_value(true),
                 )
-                .arg(Arg::with_name("word").multiple(true))
+                .arg(Arg::with_name("word").multiple(true)),
         )
         .get_matches();
 
