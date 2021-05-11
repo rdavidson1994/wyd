@@ -1,4 +1,5 @@
 use chrono::{serde::ts_seconds, DateTime, Duration, Local, Utc};
+use fs::File;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::VecDeque,
@@ -6,6 +7,7 @@ use std::{
     fs::{self, OpenOptions},
     io::Write,
     path::{Path, PathBuf},
+    process::Command,
 };
 extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
@@ -314,27 +316,33 @@ impl JobBoard {
         }
     }
 
+    fn suspended_stack_summary(&self) -> String {
+        let mut output = String::new();
+        for stack in &self.suspended_stacks {
+            for (i, job) in stack.data.iter().enumerate() {
+                if i == 0 {
+                    output.push_str(&job.label);
+                    output.push_str(" (suspended at ");
+                    output.push_str(&format!(
+                        "{}",
+                        DateTime::<Local>::from(stack.date_suspended).format("%r")
+                    ));
+                    output.push_str(")");
+                } else {
+                    output.push_str("    ");
+                    output.push_str(&job.label);
+                }
+                output.push('\n');
+            }
+        }
+        output
+    }
+
     fn empty_stack_message(&self) -> String {
         let mut output = String::new();
         if self.suspended_stacks.len() > 0 {
             output.push_str("You finished your jobs in progress. Yay! Use `wyd resume` to resume the topmost suspended task:\n");
-            for stack in &self.suspended_stacks {
-                for (i, job) in stack.data.iter().enumerate() {
-                    if i == 0 {
-                        output.push_str(&job.label);
-                        output.push_str(" (suspended at ");
-                        output.push_str(&format!(
-                            "{}",
-                            DateTime::<Local>::from(stack.date_suspended).format("%r")
-                        ));
-                        output.push_str(")");
-                    } else {
-                        output.push_str("    ");
-                        output.push_str(&job.label);
-                    }
-                    output.push('\n');
-                }
-            }
+            output.push_str(&self.suspended_stack_summary())
         } else {
             output.push_str("No jobs in progress, and no suspended tasks! Use `wyd push [some arbitrary label]` to start a new task.")
         }
@@ -363,13 +371,6 @@ fn should_notify(last_notified: &Option<DateTime<Utc>>) -> bool {
 }
 
 fn main() {
-    let app_dir = dirs::data_local_dir()
-        .expect("Could not locate current user's app data folder.")
-        .join(".wyd");
-
-    fs::create_dir_all(&app_dir).expect("Could not create application directory");
-    let mut app = WydApplication::load(app_dir);
-
     let matches = App::new("What You're Doing")
         .version(crate_version!())
         .settings(&[AppSettings::InferSubcommands])
@@ -392,6 +393,9 @@ fn main() {
                     .takes_value(false),
             ),
         )
+        .subcommand(SubCommand::with_name("become-notifier"))
+        .subcommand(SubCommand::with_name("kill-notifier"))
+        .subcommand(SubCommand::with_name("spawn-notifier"))
         .subcommand(
             SubCommand::with_name("resume").arg(
                 Arg::with_name("pattern")
@@ -417,6 +421,13 @@ fn main() {
                 .arg(Arg::with_name("word").multiple(true)),
         )
         .get_matches();
+
+    let app_dir = dirs::data_local_dir()
+        .expect("Could not locate current user's app data folder.")
+        .join(".wyd");
+
+    fs::create_dir_all(&app_dir).expect("Could not create application directory");
+    let mut app = WydApplication::load(app_dir);
 
     match matches.subcommand() {
         ("push", Some(m)) => {
@@ -502,6 +513,34 @@ fn main() {
                 println!("No matching job to resume.");
             }
             app.save();
+        }
+        ("become-notifier", Some(_)) => {
+            let mut app_dir = app.app_dir;
+            loop {
+                if app_dir.join(".kill-notifier").exists() {
+                    break;
+                }
+                app = WydApplication::load(app_dir);
+                app.send_reminders(false);
+                app.save();
+                app_dir = app.app_dir;
+                std::thread::sleep(StdDuration::from_secs(1));
+            }
+        }
+        ("spawn-notifier", Some(_)) => {
+            if app.app_dir.join(".kill-notifier").exists() {
+                fs::remove_file(app.app_dir.join(".kill-notifier"))
+                    .expect("Unable to delete .kill-notifier file.");
+            }
+            let exe_path = std::env::current_exe().expect("unable to locate current executable.");
+            Command::new(exe_path)
+                .arg("become-notifier")
+                .spawn()
+                .expect("Unable to spawn notifier process.");
+        }
+        ("kill-notifier", Some(_)) => {
+            File::create(app.app_dir.join(".kill-notifier"))
+                .expect("unable to create .kill-notifier file.");
         }
         ("remind", Some(m)) => {
             let force = m.is_present("force");
