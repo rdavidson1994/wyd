@@ -13,6 +13,7 @@ use notify_rust::Notification;
 use ron::ser::{self, PrettyConfig};
 use std::default::Default;
 use std::time::Duration as StdDuration;
+use url::Url;
 
 const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
 
@@ -73,10 +74,11 @@ impl Display for Job {
 
 type JobStack = Vec<Job>;
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 struct WydApplication {
     job_board: JobBoard,
     app_dir: PathBuf,
+    icon_url: Url
 }
 
 impl WydApplication {
@@ -85,6 +87,16 @@ impl WydApplication {
             .expect("Attempt to reserialize updated job list failed.");
         fs::write(self.app_dir.join("jobs.ron"), new_file_text)
             .expect("Failed to write updated job list.");
+    }
+
+    fn load(app_dir: PathBuf) -> WydApplication {
+        let job_board = JobBoard::load(&app_dir);
+        let icon_url = Url::from_file_path(app_dir.join("wyd-icon.png")).expect("Unable to load icon");
+        WydApplication {
+            app_dir,
+            job_board,
+            icon_url
+        }
     }
 
     fn print(&self, message: &str) {
@@ -305,8 +317,7 @@ fn main() {
         .join(".wyd");
 
     fs::create_dir_all(&app_dir).expect("Could not create application directory");
-    let job_board = JobBoard::load(&app_dir);
-    let mut app = WydApplication { app_dir, job_board };
+    let mut app = WydApplication::load(app_dir);
 
     let matches = App::new("What You're Doing")
         .version(crate_version!())
@@ -463,6 +474,7 @@ fn main() {
                             "The timebox for task \"{}\" has expired.",
                             job.label
                         ))
+                        .icon(app.icon_url.as_str())
                         .timeout(0)
                         .appname("wyd")
                         .show()
@@ -486,12 +498,15 @@ fn main() {
                     Some(job) => job.to_string(),
                     None => "[[Empty Job Stack D:]]".to_string(),
                 };
+                println!("{}",app.icon_url.as_str());
+
                 Notification::new()
                     .summary("Timer!")
                     .body(&format!(
                         "Reminder about this suspended task: \"{}\".\nSuspension reason: \"{}\"",
                         first_job_string, stack.reason
                     ))
+                    .icon(app.icon_url.as_str())
                     .timeout(0)
                     .appname("wyd")
                     .show()
