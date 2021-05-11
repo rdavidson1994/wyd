@@ -134,6 +134,56 @@ impl WydApplication {
         self.job_board.push(job);
         self.print(&log_line);
     }
+
+    fn send_reminders(&mut self, force: bool) {
+        for mut job in &mut self.job_board.active_stack {
+            if job.timebox_expired() {
+                if !force && !should_notify(&job.last_notifiaction) {
+                    continue;
+                }
+                Notification::new()
+                    .summary("Expired timebox")
+                    .body(&format!(
+                        "The timebox for task \"{}\" has expired.",
+                        job.label
+                    ))
+                    .timeout(0)
+                    .appname("wyd")
+                    .show()
+                    .expect("Unable to show notification");
+                job.last_notifiaction = Some(Utc::now());
+            }
+        }
+        for mut stack in &mut self.job_board.suspended_stacks {
+            let timer_exhausted = match stack.timer {
+                Some(timer) => timer < Utc::now(),
+                None => false,
+            };
+            if !timer_exhausted {
+                continue;
+            }
+            if !force && !should_notify(&stack.last_notifiaction) {
+                continue;
+            }
+
+            let first_job_string = match stack.data.first() {
+                Some(job) => job.to_string(),
+                None => "[[Empty Job Stack D:]]".to_string(),
+            };
+
+            Notification::new()
+                .summary("Timer!")
+                .body(&format!(
+                    "Reminder about this suspended task: \"{}\".\nSuspension reason: \"{}\"",
+                    first_job_string, stack.reason
+                ))
+                .timeout(0)
+                .appname("wyd")
+                .show()
+                .expect("Unable to show notification");
+            stack.last_notifiaction = Some(Utc::now());
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -454,56 +504,7 @@ fn main() {
         }
         ("remind", Some(m)) => {
             let force = m.is_present("force");
-            for mut job in &mut app.job_board.active_stack {
-                if job.timebox_expired() {
-                    if !force && !should_notify(&job.last_notifiaction) {
-                        continue;
-                    }
-                    Notification::new()
-                        .summary("Expired timebox")
-                        .body(&format!(
-                            "The timebox for task \"{}\" has expired.",
-                            job.label
-                        ))
-                        .icon(app.icon_url.as_str())
-                        .timeout(0)
-                        .appname("wyd")
-                        .show()
-                        .expect("Unable to show notification");
-                    job.last_notifiaction = Some(Utc::now());
-                }
-            }
-            for mut stack in &mut app.job_board.suspended_stacks {
-                let timer_exhausted = match stack.timer {
-                    Some(timer) => timer < Utc::now(),
-                    None => false,
-                };
-                if !timer_exhausted {
-                    continue;
-                }
-                if !force && !should_notify(&stack.last_notifiaction) {
-                    continue;
-                }
-
-                let first_job_string = match stack.data.first() {
-                    Some(job) => job.to_string(),
-                    None => "[[Empty Job Stack D:]]".to_string(),
-                };
-                println!("{}",app.icon_url.as_str());
-
-                Notification::new()
-                    .summary("Timer!")
-                    .body(&format!(
-                        "Reminder about this suspended task: \"{}\".\nSuspension reason: \"{}\"",
-                        first_job_string, stack.reason
-                    ))
-                    .icon(app.icon_url.as_str())
-                    .timeout(0)
-                    .appname("wyd")
-                    .show()
-                    .expect("Unable to show notification");
-                stack.last_notifiaction = Some(Utc::now());
-            }
+            app.send_reminders(force);
             app.save();
         }
         (missing, Some(_)) => {
