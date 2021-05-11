@@ -1,6 +1,12 @@
 use chrono::{serde::ts_seconds, DateTime, Duration, Local, Utc};
 use serde::{Deserialize, Serialize};
-use std::{collections::VecDeque, fmt::Display, fs::{self, OpenOptions}, io::Write, path::{Path, PathBuf}};
+use std::{
+    collections::VecDeque,
+    fmt::Display,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+};
 extern crate clap;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use ron::ser::{self, PrettyConfig};
@@ -39,20 +45,16 @@ impl Display for Job {
 
 type JobStack = Vec<Job>;
 
-
 #[derive(Serialize, Deserialize, Clone)]
 struct WydApplication {
     job_board: JobBoard,
-    app_dir: PathBuf
+    app_dir: PathBuf,
 }
 
 impl WydApplication {
     fn save(&self) {
-        let new_file_text = ser::to_string_pretty(
-            &self.job_board,
-            PrettyConfig::new(),
-        )
-        .expect("Attempt to reserialize updated job list failed.");
+        let new_file_text = ser::to_string_pretty(&self.job_board, PrettyConfig::new())
+            .expect("Attempt to reserialize updated job list failed.");
         fs::write(self.app_dir.join("jobs.ron"), new_file_text)
             .expect("Failed to write updated job list.");
     }
@@ -94,8 +96,7 @@ impl WydApplication {
     }
 }
 
-
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Default)]
 struct JobBoard {
     active_stack: JobStack,
     suspended_stacks: VecDeque<SuspendedStack>,
@@ -125,14 +126,10 @@ impl JobBoard {
             .expect(&bad_path("Failed to open or create file {}"));
         let contents =
             fs::read_to_string(&stack_file_path).expect(&bad_path("Failed to read file {}"));
-        let (active_stack, suspended_stacks) = if contents.is_empty() {
+        if contents.is_empty() {
             default()
         } else {
             ron::from_str(&contents).expect(&bad_path("Stack file at {} is malformed."))
-        };
-        JobBoard {
-            active_stack,
-            suspended_stacks,
         }
     }
 
@@ -191,8 +188,6 @@ impl JobBoard {
         }
     }
 
-
-
     fn push(&mut self, job: Job) {
         self.active_stack.push(job);
     }
@@ -204,8 +199,6 @@ impl JobBoard {
     fn num_active_jobs(&self) -> usize {
         self.active_stack.len()
     }
-
-
 
     fn get_summary(&self) -> String {
         if self.num_active_jobs() == 0 {
@@ -264,10 +257,7 @@ fn main() {
 
     fs::create_dir_all(&app_dir).expect("Could not create application directory");
     let job_board = JobBoard::load(&app_dir);
-    let mut app = WydApplication {
-        app_dir,
-        job_board
-    };
+    let mut app = WydApplication { app_dir, job_board };
 
     let matches = App::new("What're You Doing")
         .settings(&[AppSettings::InferSubcommands])
@@ -312,7 +302,6 @@ fn main() {
 
     match matches.subcommand() {
         ("push", Some(m)) => {
-            let indent = app.get_indent();
             let label = word_args_to_string(m);
             let timebox = match m.value_of("timebox") {
                 Some(string) => {
