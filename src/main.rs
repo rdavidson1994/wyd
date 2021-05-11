@@ -1,12 +1,6 @@
 use chrono::{serde::ts_seconds, DateTime, Duration, Local, Utc};
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::VecDeque,
-    fmt::Display,
-    fs::{self, OpenOptions},
-    io::Write,
-    path::PathBuf,
-};
+use std::{collections::VecDeque, fmt::Display, fs::{self, OpenOptions}, io::Write, path::{Path, PathBuf}};
 extern crate clap;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
 use ron::ser::{self, PrettyConfig};
@@ -45,11 +39,66 @@ impl Display for Job {
 
 type JobStack = Vec<Job>;
 
+
+#[derive(Serialize, Deserialize, Clone)]
+struct WydApplication {
+    job_board: JobBoard,
+    app_dir: PathBuf
+}
+
+impl WydApplication {
+    fn save(&self) {
+        let new_file_text = ser::to_string_pretty(
+            &self.job_board,
+            PrettyConfig::new(),
+        )
+        .expect("Attempt to reserialize updated job list failed.");
+        fs::write(self.app_dir.join("jobs.ron"), new_file_text)
+            .expect("Failed to write updated job list.");
+    }
+
+    fn print(&self, message: &str) {
+        self.append_to_log(&(message.to_owned() + "\n"));
+        println!("{}", message.trim());
+    }
+
+    fn get_indent(&self) -> String {
+        let mut output = String::new();
+        for _ in &self.job_board.active_stack {
+            output.push(' ');
+        }
+        output
+    }
+
+    fn append_to_log(&self, text: &str) {
+        let date = Local::now();
+        let log_file_name = format!("{}", date.format("wyd-%F.log"));
+        let log_path = self.app_dir.join(log_file_name);
+
+        let mut file = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .expect(&format!("Failed to open log file at {:?}", log_path));
+
+        file.write(text.as_bytes())
+            .expect(&format!("Failed to write to log file at {:?}", log_path));
+    }
+
+    fn add_job(&mut self, job: Job) {
+        let mut log_line = String::new();
+        log_line.push_str(&self.get_indent());
+        log_line.push_str(&format!("{}", job));
+        self.job_board.push(job);
+        self.print(&log_line);
+    }
+}
+
+
 #[derive(Serialize, Deserialize, Clone)]
 struct JobBoard {
     active_stack: JobStack,
     suspended_stacks: VecDeque<SuspendedStack>,
-    app_dir: PathBuf,
 }
 
 trait StringMatch: FnMut(&str) -> bool {}
@@ -58,15 +107,14 @@ impl<T> StringMatch for T where T: FnMut(&str) -> bool {}
 
 impl JobBoard {
     #[allow(dead_code)]
-    fn empty(app_dir: PathBuf) -> Self {
+    fn empty() -> Self {
         JobBoard {
             active_stack: default(),
             suspended_stacks: default(),
-            app_dir,
         }
     }
 
-    fn load(app_dir: PathBuf) -> Self {
+    fn load(app_dir: &Path) -> Self {
         let stack_file_path = app_dir.join("jobs.ron");
         let bad_path = |s: &str| s.replace("{}", &format!("{:?}", &stack_file_path));
         OpenOptions::new()
@@ -83,7 +131,6 @@ impl JobBoard {
             ron::from_str(&contents).expect(&bad_path("Stack file at {} is malformed."))
         };
         JobBoard {
-            app_dir,
             active_stack,
             suspended_stacks,
         }
@@ -144,30 +191,7 @@ impl JobBoard {
         }
     }
 
-    fn save(self) {
-        let new_file_text = ser::to_string_pretty(
-            &(self.active_stack, self.suspended_stacks),
-            PrettyConfig::new(),
-        )
-        .expect("Attempt to reserialize updated job list failed.");
-        fs::write(self.app_dir.join("jobs.ron"), new_file_text)
-            .expect("Failed to write updated job list.");
-    }
 
-    fn append_to_log(&self, text: &str) {
-        let date = Local::now();
-        let log_file_name = format!("{}", date.format("wyd-%F.log"));
-        let log_path = self.app_dir.join(log_file_name);
-
-        let mut file = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .expect(&format!("Failed to open log file at {:?}", log_path));
-
-        file.write(text.as_bytes())
-            .expect(&format!("Failed to write to log file at {:?}", log_path));
-    }
 
     fn push(&mut self, job: Job) {
         self.active_stack.push(job);
@@ -181,18 +205,7 @@ impl JobBoard {
         self.active_stack.len()
     }
 
-    fn get_indent(&self) -> String {
-        let mut output = String::new();
-        for _ in 0..self.num_active_jobs() {
-            output.push(' ');
-        }
-        output
-    }
 
-    fn print(&self, message: &str) {
-        self.append_to_log(&(message.to_owned() + "\n"));
-        println!("{}", message.trim());
-    }
 
     fn get_summary(&self) -> String {
         if self.num_active_jobs() == 0 {
@@ -250,7 +263,11 @@ fn main() {
         .join(".wyd");
 
     fs::create_dir_all(&app_dir).expect("Could not create application directory");
-    let mut job_board = JobBoard::load(app_dir);
+    let job_board = JobBoard::load(&app_dir);
+    let mut app = WydApplication {
+        app_dir,
+        job_board
+    };
 
     let matches = App::new("What're You Doing")
         .settings(&[AppSettings::InferSubcommands])
@@ -295,7 +312,7 @@ fn main() {
 
     match matches.subcommand() {
         ("push", Some(m)) => {
-            let indent = job_board.get_indent();
+            let indent = app.get_indent();
             let label = word_args_to_string(m);
             let timebox = match m.value_of("timebox") {
                 Some(string) => {
@@ -310,12 +327,8 @@ fn main() {
                 begin_date: Utc::now(),
                 timebox,
             };
-            let mut log_line = String::new();
-            log_line.push_str(&indent);
-            log_line.push_str(&format!("{}", job));
-            job_board.push(job);
-            job_board.print(&log_line);
-            job_board.save();
+            app.add_job(job);
+            app.save();
         }
         ("suspend", Some(m)) => {
             let pattern = m
@@ -326,14 +339,14 @@ fn main() {
 
             let matcher = substring_matcher(&pattern);
 
-            if job_board.suspend_matching(matcher, reason).is_ok() {
+            if app.job_board.suspend_matching(matcher, reason).is_ok() {
                 println!("Job suspended.");
             } else {
                 println!("No matching job to suspend.")
             }
-            job_board.save();
+            app.save();
         }
-        ("done", Some(_)) => match job_board.pop() {
+        ("done", Some(_)) => match app.job_board.pop() {
             Some(job) => {
                 let duration = Local::now().signed_duration_since(job.begin_date);
                 let non_negative_dur = Duration::seconds(duration.num_seconds())
@@ -343,38 +356,38 @@ fn main() {
 
                 let log_line = format!(
                     "{}Completed job \"{}\" (time elapsed: {})",
-                    job_board.get_indent(),
+                    app.get_indent(),
                     job.label,
                     duration_str
                 );
-                job_board.print(&log_line);
-                if let Some(new_job) = job_board.active_stack.last() {
+                app.print(&log_line);
+                if let Some(new_job) = app.job_board.active_stack.last() {
                     println!("{}", new_job)
                 } else {
-                    print!("{}", job_board.get_summary())
+                    print!("{}", app.job_board.get_summary())
                 }
-                job_board.save();
+                app.save();
             }
             None => {
-                print!("{}", job_board.empty_stack_message())
+                print!("{}", app.job_board.empty_stack_message())
             }
         },
         ("resume", Some(m)) => {
             let outcome = match m.value_of("pattern") {
-                Some(pattern) => job_board.resume_matching(substring_matcher(&pattern)),
-                None => job_board.resume_at_index(0),
+                Some(pattern) => app.job_board.resume_matching(substring_matcher(&pattern)),
+                None => app.job_board.resume_at_index(0),
             };
 
             if outcome.is_ok() {
-                println!("Job resumed: {}", job_board.active_stack[0]);
+                println!("Job resumed: {}", app.job_board.active_stack[0]);
             } else {
                 println!("No matching job to resume.");
             }
-            job_board.save();
+            app.save();
         }
         ("remind", Some(_)) => {
             let mut min_remaining_timebox = None;
-            for job in job_board.active_stack {
+            for job in app.job_board.active_stack {
                 if let Some(timebox) = job.timebox {
                     let time_elapsed = Utc::now().signed_duration_since(job.begin_date);
                     let timebox_duration =
@@ -407,7 +420,7 @@ fn main() {
             unimplemented!("No implementation for subcommand {}", missing)
         }
         ("", None) => {
-            print!("{}", job_board.get_summary());
+            print!("{}", app.job_board.get_summary());
         }
         (invalid, None) => {
             panic!("Invalid subcommand {}", invalid)
