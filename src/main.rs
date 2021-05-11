@@ -351,7 +351,6 @@ fn main() {
                     Arg::with_name("reason")
                         .long("reason")
                         .short("r")
-                        .required(true)
                         .takes_value(true),
                 )
                 .arg(
@@ -388,7 +387,7 @@ fn main() {
                 .value_of("pattern")
                 .expect("Mandatory argument")
                 .to_owned();
-            let reason = m.value_of("reason").expect("Mandatory argument").to_owned();
+            let reason = m.value_of("reason").unwrap_or("None").to_owned();
             let timer = if let Some(timer_str) = m.value_of("timer") {
                 let std_duration = humantime::parse_duration(timer_str).expect("Invalid duration");
                 let utc_date = Utc::now()
