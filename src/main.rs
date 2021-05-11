@@ -8,7 +8,7 @@ use std::{
     path::{Path, PathBuf},
 };
 extern crate clap;
-use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use notify_rust::Notification;
 use ron::ser::{self, PrettyConfig};
 use std::default::Default;
@@ -285,7 +285,8 @@ fn main() {
     let job_board = JobBoard::load(&app_dir);
     let mut app = WydApplication { app_dir, job_board };
 
-    let matches = App::new("What're You Doing")
+    let matches = App::new("What You're Doing")
+        .version(crate_version!())
         .settings(&[AppSettings::InferSubcommands])
         .subcommand(
             SubCommand::with_name("push")
