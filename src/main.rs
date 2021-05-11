@@ -352,13 +352,6 @@ fn main() {
         .subcommand(
             SubCommand::with_name("suspend")
                 .arg(
-                    Arg::with_name("pattern")
-                        .required(true)
-                        .long("pattern")
-                        .short("p")
-                        .takes_value(true),
-                )
-                .arg(
                     Arg::with_name("reason")
                         .long("reason")
                         .short("r")
@@ -369,7 +362,8 @@ fn main() {
                         .long("timer")
                         .short("t")
                         .takes_value(true),
-                ),
+                )
+                .arg(Arg::with_name("word").multiple(true))
         )
         .get_matches();
 
@@ -394,10 +388,7 @@ fn main() {
             app.save();
         }
         ("suspend", Some(m)) => {
-            let pattern = m
-                .value_of("pattern")
-                .expect("Mandatory argument")
-                .to_owned();
+            let pattern = word_args_to_string(m);
             let reason = m.value_of("reason").unwrap_or("None").to_owned();
             let timer = if let Some(timer_str) = m.value_of("timer") {
                 let std_duration = humantime::parse_duration(timer_str).expect("Invalid duration");
