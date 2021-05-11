@@ -9,13 +9,12 @@ use std::{
 };
 extern crate clap;
 use clap::{App, AppSettings, Arg, ArgMatches, SubCommand};
+use notify_rust::Notification;
 use ron::ser::{self, PrettyConfig};
 use std::default::Default;
 use std::time::Duration as StdDuration;
-use notify_rust::Notification;
 
-
-const MIN_NOTIFICATION_DELAY_SECONDS: i64 =  60 * 3;
+const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Job {
@@ -417,11 +416,15 @@ fn main() {
                     if should_notify {
                         Notification::new()
                             .summary("Expired timebox")
-                            .body(&format!("The timebox for task \"{}\" has expired.", job.label))
+                            .body(&format!(
+                                "The timebox for task \"{}\" has expired.",
+                                job.label
+                            ))
                             .timeout(0)
                             .appname("wyd")
                             //.icon("firefox")
-                            .show().expect("Unable to show notification");
+                            .show()
+                            .expect("Unable to show notification");
                         job.last_notifiaction = Some(Utc::now());
                     }
                 }
