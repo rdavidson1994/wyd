@@ -290,6 +290,15 @@ fn substring_matcher(pattern: &str) -> impl Fn(&str) -> bool + '_ {
     move |s: &str| -> bool { s.contains(pattern) }
 }
 
+fn should_notify(last_notified: &Option<DateTime<Utc>>) -> bool {
+    match last_notified {
+        Some(date) => {
+            Utc::now().signed_duration_since(*date).num_seconds() > MIN_NOTIFICATION_DELAY_SECONDS
+        }
+        None => true,
+    }
+}
+
 fn main() {
     let app_dir = dirs::data_local_dir()
         .expect("Could not locate current user's app data folder.")
@@ -313,7 +322,14 @@ fn main() {
                 .arg(Arg::with_name("word").multiple(true)),
         )
         .subcommand(SubCommand::with_name("done"))
-        .subcommand(SubCommand::with_name("remind"))
+        .subcommand(
+            SubCommand::with_name("remind").arg(
+                Arg::with_name("force")
+                    .long("force")
+                    .short("f")
+                    .takes_value(false),
+            ),
+        )
         .subcommand(
             SubCommand::with_name("resume").arg(
                 Arg::with_name("pattern")
@@ -435,19 +451,11 @@ fn main() {
             }
             app.save();
         }
-        ("remind", Some(_)) => {
+        ("remind", Some(m)) => {
+            let force = m.is_present("force");
             for mut job in &mut app.job_board.active_stack {
                 if job.timebox_expired() {
-                    let should_notify = match job.last_notifiaction {
-                        Some(notification_date) => {
-                            Utc::now()
-                                .signed_duration_since(notification_date)
-                                .num_seconds()
-                                > MIN_NOTIFICATION_DELAY_SECONDS
-                        }
-                        None => true,
-                    };
-                    if !should_notify {
+                    if !force && !should_notify(&job.last_notifiaction) {
                         continue;
                     }
                     Notification::new()
@@ -468,20 +476,10 @@ fn main() {
                     Some(timer) => timer < Utc::now(),
                     None => false,
                 };
-                if timer_exhausted {
+                if !timer_exhausted {
                     continue;
                 }
-
-                let should_notify = match stack.last_notifiaction {
-                    Some(notification_date) => {
-                        Utc::now()
-                            .signed_duration_since(notification_date)
-                            .num_seconds()
-                            > MIN_NOTIFICATION_DELAY_SECONDS
-                    }
-                    None => true,
-                };
-                if !should_notify {
+                if !force && !should_notify(&stack.last_notifiaction) {
                     continue;
                 }
 
