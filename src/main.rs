@@ -373,7 +373,35 @@ fn main() {
             job_board.save();
         }
         ("remind", Some(_)) => {
-            println!("[sent a reminder]")
+            let mut min_remaining_timebox = None;
+            for job in job_board.active_stack {
+                if let Some(timebox) = job.timebox {
+                    let time_elapsed = Utc::now().signed_duration_since(job.begin_date);
+                    let timebox_duration =
+                        Duration::from_std(timebox).expect("invalid timebox duration");
+                    let time_remaining = (timebox_duration - time_elapsed)
+                        .to_std()
+                        .unwrap_or(std::time::Duration::new(0, 0));
+
+                    if time_remaining <= std::time::Duration::new(0, 0) {
+                        println!("VERY LOUD REMINDER ABOUT AN EXPIRING TIMEBOX! :D");
+                        println!("This is the job that expired: {}", job);
+                        // job.timebox = None;
+                    } else {
+                        min_remaining_timebox = match min_remaining_timebox {
+                            Some(min_duration) => Some(std::cmp::min(time_remaining, min_duration)),
+                            None => Some(time_remaining),
+                        }
+                    }
+                }
+            }
+
+            if let Some(min_remaining_timebox) = min_remaining_timebox {
+                println!("{:?}", min_remaining_timebox);
+                std::thread::sleep(min_remaining_timebox);
+            } else {
+                println!("No min timebox")
+            }
         }
         (missing, Some(_)) => {
             unimplemented!("No implementation for subcommand {}", missing)
