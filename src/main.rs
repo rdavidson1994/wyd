@@ -56,6 +56,8 @@ struct SuspendedStack {
     reason: String,
     #[serde(with = "ts_seconds")]
     date_suspended: DateTime<Utc>,
+    timer: Option<DateTime<Utc>>,
+    last_notifiaction: Option<DateTime<Utc>>,
 }
 
 impl Display for Job {
@@ -168,7 +170,12 @@ impl JobBoard {
         None
     }
 
-    fn suspend_at(&mut self, index: usize, reason: String) -> Result<(), ()> {
+    fn suspend_at(
+        &mut self,
+        index: usize,
+        reason: String,
+        timer: Option<DateTime<Utc>>,
+    ) -> Result<(), ()> {
         if index >= self.active_stack.len() {
             return Err(());
         }
@@ -177,14 +184,21 @@ impl JobBoard {
             data: jobs_to_suspend,
             reason,
             date_suspended: Utc::now(),
+            timer,
+            last_notifiaction: None,
         };
         self.suspended_stacks.push_back(suspended_stack);
         Ok(())
     }
 
-    fn suspend_matching(&mut self, pattern: impl StringMatch, reason: String) -> Result<(), ()> {
+    fn suspend_matching(
+        &mut self,
+        pattern: impl StringMatch,
+        reason: String,
+        timer: Option<DateTime<Utc>>,
+    ) -> Result<(), ()> {
         if let Some((i, _job)) = self.find_job(pattern) {
-            self.suspend_at(i, reason)
+            self.suspend_at(i, reason, timer)
         } else {
             Err(())
         }
@@ -323,6 +337,12 @@ fn main() {
                         .short("r")
                         .required(true)
                         .takes_value(true),
+                )
+                .arg(
+                    Arg::with_name("timer")
+                        .long("timer")
+                        .short("t")
+                        .takes_value(true),
                 ),
         )
         .get_matches();
@@ -353,10 +373,23 @@ fn main() {
                 .expect("Mandatory argument")
                 .to_owned();
             let reason = m.value_of("reason").expect("Mandatory argument").to_owned();
+            let timer = if let Some(timer_str) = m.value_of("timer") {
+                let std_duration = humantime::parse_duration(timer_str).expect("Invalid duration");
+                let utc_date = Utc::now()
+                    + Duration::from_std(std_duration)
+                        .expect("Unable to convert std duration to chrono duration.");
+                Some(utc_date)
+            } else {
+                None
+            };
 
             let matcher = substring_matcher(&pattern);
 
-            if app.job_board.suspend_matching(matcher, reason).is_ok() {
+            if app
+                .job_board
+                .suspend_matching(matcher, reason, timer)
+                .is_ok()
+            {
                 println!("Job suspended.");
             } else {
                 println!("No matching job to suspend.")
@@ -395,8 +428,8 @@ fn main() {
                 None => app.job_board.resume_at_index(0),
             };
 
-            if outcome.is_ok() {
-                println!("Job resumed: {}", app.job_board.active_stack[0]);
+            if let Some(new_top) = outcome.ok().and(app.job_board.active_stack.last()) {
+                println!("Job resumed: {}", new_top);
             } else {
                 println!("No matching job to resume.");
             }
@@ -414,21 +447,59 @@ fn main() {
                         }
                         None => true,
                     };
-                    if should_notify {
-                        Notification::new()
-                            .summary("Expired timebox")
-                            .body(&format!(
-                                "The timebox for task \"{}\" has expired.",
-                                job.label
-                            ))
-                            .timeout(0)
-                            .appname("wyd")
-                            //.icon("firefox")
-                            .show()
-                            .expect("Unable to show notification");
-                        job.last_notifiaction = Some(Utc::now());
+                    if !should_notify {
+                        continue;
                     }
+                    Notification::new()
+                        .summary("Expired timebox")
+                        .body(&format!(
+                            "The timebox for task \"{}\" has expired.",
+                            job.label
+                        ))
+                        .timeout(0)
+                        .appname("wyd")
+                        .show()
+                        .expect("Unable to show notification");
+                    job.last_notifiaction = Some(Utc::now());
                 }
+            }
+            for mut stack in &mut app.job_board.suspended_stacks {
+                let timer_exhausted = match stack.timer {
+                    Some(timer) => timer < Utc::now(),
+                    None => false,
+                };
+                if timer_exhausted {
+                    continue;
+                }
+
+                let should_notify = match stack.last_notifiaction {
+                    Some(notification_date) => {
+                        Utc::now()
+                            .signed_duration_since(notification_date)
+                            .num_seconds()
+                            > MIN_NOTIFICATION_DELAY_SECONDS
+                    }
+                    None => true,
+                };
+                if !should_notify {
+                    continue;
+                }
+
+                let first_job_string = match stack.data.first() {
+                    Some(job) => job.to_string(),
+                    None => "[[Empty Job Stack D:]]".to_string(),
+                };
+                Notification::new()
+                    .summary("Timer!")
+                    .body(&format!(
+                        "Reminder about this suspended task: \"{}\".\nSuspension reason: \"{}\"",
+                        first_job_string, stack.reason
+                    ))
+                    .timeout(0)
+                    .appname("wyd")
+                    .show()
+                    .expect("Unable to show notification");
+                stack.last_notifiaction = Some(Utc::now());
             }
             app.save();
         }
