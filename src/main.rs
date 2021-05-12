@@ -363,7 +363,7 @@ impl JobBoard {
 
 fn word_args_to_string(args: &ArgMatches) -> String {
     args.values_of("word")
-        .expect("Cannot create an empty entry.")
+        .unwrap_or_default()
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -407,14 +407,7 @@ fn main() {
         .subcommand(SubCommand::with_name("become-notifier"))
         .subcommand(SubCommand::with_name("kill-notifier"))
         .subcommand(SubCommand::with_name("spawn-notifier"))
-        .subcommand(
-            SubCommand::with_name("resume").arg(
-                Arg::with_name("pattern")
-                    .long("pattern")
-                    .short("p")
-                    .takes_value(true),
-            ),
-        )
+        .subcommand(SubCommand::with_name("resume").arg(Arg::with_name("word").multiple(true)))
         .subcommand(
             SubCommand::with_name("suspend")
                 .arg(
@@ -449,6 +442,10 @@ fn main() {
     match matches.subcommand() {
         ("push", Some(m)) => {
             let label = word_args_to_string(m);
+            if label.is_empty() {
+                eprintln!("Can't create a job without a label.");
+                return;
+            }
             let timebox = match m.value_of("timebox") {
                 Some(string) => {
                     let dur = humantime::parse_duration(string).expect("Invalid timebox value.");
@@ -468,6 +465,10 @@ fn main() {
         }
         ("suspend", Some(m)) => {
             let words = word_args_to_string(m);
+            if words.is_empty() {
+                eprintln!("Can't perform suspend without a label.");
+                return;
+            }
             let reason = m.value_of("reason").unwrap_or("None").to_owned();
             let timer = if let Some(timer_str) = m.value_of("timer") {
                 let std_duration = humantime::parse_duration(timer_str).expect("Invalid duration");
@@ -528,15 +529,17 @@ fn main() {
             }
         },
         ("resume", Some(m)) => {
-            let outcome = match m.value_of("pattern") {
-                Some(pattern) => app.job_board.resume_matching(substring_matcher(&pattern)),
-                None => app.job_board.resume_at_index(0),
+            let pattern = word_args_to_string(m);
+            let outcome = if pattern.is_empty() {
+                app.job_board.resume_at_index(0)
+            } else {
+                app.job_board.resume_matching(substring_matcher(&pattern))
             };
 
             if let Some(new_top) = outcome.ok().and(app.job_board.active_stack.last()) {
                 println!("Job resumed: {}", new_top);
             } else {
-                println!("No matching job to resume.");
+                eprintln!("No matching job to resume.");
             }
             app.save();
         }
