@@ -130,6 +130,17 @@ impl WydApplication {
             .expect(&format!("Failed to write to log file at {:?}", log_path));
     }
 
+    fn add_suspended_job(&mut self, job: Job, reason: String, timer: Option<DateTime<Utc>>) {
+        let new_stack = SuspendedStack {
+            data: vec![job],
+            reason,
+            date_suspended: Utc::now(),
+            timer,
+            last_notifiaction: None,
+        };
+        self.job_board.suspended_stacks.push_back(new_stack)
+    }
+
     fn add_job(&mut self, job: Job) {
         let mut log_line = String::new();
         log_line.push_str(&self.get_indent());
@@ -418,6 +429,12 @@ fn main() {
                         .short("t")
                         .takes_value(true),
                 )
+                .arg(
+                    Arg::with_name("new")
+                        .long("new")
+                        .short("n")
+                        .takes_value(false),
+                )
                 .arg(Arg::with_name("word").multiple(true)),
         )
         .get_matches();
@@ -450,7 +467,7 @@ fn main() {
             app.save();
         }
         ("suspend", Some(m)) => {
-            let pattern = word_args_to_string(m);
+            let words = word_args_to_string(m);
             let reason = m.value_of("reason").unwrap_or("None").to_owned();
             let timer = if let Some(timer_str) = m.value_of("timer") {
                 let std_duration = humantime::parse_duration(timer_str).expect("Invalid duration");
@@ -462,16 +479,25 @@ fn main() {
                 None
             };
 
-            let matcher = substring_matcher(&pattern);
-
-            if app
-                .job_board
-                .suspend_matching(matcher, reason, timer)
-                .is_ok()
-            {
-                println!("Job suspended.");
+            if m.is_present("new") {
+                let job = Job {
+                    label: words,
+                    begin_date: Utc::now(),
+                    timebox: None,
+                    last_notifiaction: None,
+                };
+                app.add_suspended_job(job, reason, timer);
             } else {
-                println!("No matching job to suspend.")
+                let matcher = substring_matcher(&words);
+                if app
+                    .job_board
+                    .suspend_matching(matcher, reason, timer)
+                    .is_ok()
+                {
+                    println!("Job suspended.");
+                } else {
+                    println!("No matching job to suspend.")
+                }
             }
             app.save();
         }
