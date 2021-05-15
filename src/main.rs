@@ -387,15 +387,24 @@ fn main() {
         .settings(&[AppSettings::InferSubcommands])
         .subcommand(
             SubCommand::with_name("push")
+                .about("Adds a new task to the top of the stack.")
                 .arg(
                     Arg::with_name("timebox")
+                        .help("Time until task sends reminder notifications. (e.g. 1h 30m)")
                         .long("timebox")
                         .short("t")
                         .takes_value(true),
                 )
-                .arg(Arg::with_name("word").multiple(true)),
+                .arg(
+                    Arg::with_name("word").multiple(true).help(
+                        "Name of the new task. Supports bare words like `wyd push Send emails`",
+                    ),
+                ),
         )
-        .subcommand(SubCommand::with_name("done"))
+        .subcommand(
+            SubCommand::with_name("done")
+                .about("Marks the top task of the stack as complete"),
+        )
         .subcommand(
             SubCommand::with_name("remind").arg(
                 Arg::with_name("force")
@@ -404,32 +413,73 @@ fn main() {
                     .takes_value(false),
             ),
         )
-        .subcommand(SubCommand::with_name("ls"))
-        .subcommand(SubCommand::with_name("become-notifier"))
-        .subcommand(SubCommand::with_name("kill-notifier"))
-        .subcommand(SubCommand::with_name("spawn-notifier"))
-        .subcommand(SubCommand::with_name("resume").arg(Arg::with_name("word").multiple(true)))
+        .subcommand(
+            SubCommand::with_name("ls")
+                .about("Prints a list of all tasks, including suspended ones."),
+        )
+        .subcommand(
+            SubCommand::with_name("become-notifier")
+                .setting(AppSettings::Hidden)
+
+//                 .about("For automation use. Do not call manually.")
+//                 .long_about(
+//                     r#"For automation use. Do not call manually.
+
+// Causes the process to enter an infinite loop, sending reminder notifiactions
+// about any new expired timers every second until a file named `.kill-notifier`
+// is found in the current working directory. Poorly suited for manual use,
+// because the process will hijack the terminal window and terminate if the
+// window is later closed. Regular users should use spawn-notifier instead.
+// "#,
+//                 ),
+        )
+        .subcommand(
+            SubCommand::with_name("kill-notifier")
+                .about("Kills any active notifier processes.")
+        )
+        .subcommand(
+            SubCommand::with_name("spawn-notifier")
+                .about("Starts the notifier process, which sends wyd's reminder notifications.")
+        )
+        .subcommand(
+            SubCommand::with_name("resume")
+                .arg(
+                    Arg::with_name("word")
+                        .multiple(true)
+                )
+                .about("Resumes a suspended task")
+        )
         .subcommand(
             SubCommand::with_name("suspend")
+                .about("Moves a task from the active to the suspended queue.")
                 .arg(
                     Arg::with_name("reason")
                         .long("reason")
                         .short("r")
-                        .takes_value(true),
+                        .takes_value(true)
+                        .help("An optional note about why you suspended the task."),
                 )
                 .arg(
                     Arg::with_name("timer")
                         .long("timer")
                         .short("t")
-                        .takes_value(true),
+                        .takes_value(true)
+                        .help("Sets a timer, after which the suspended task will send reminders."),
                 )
                 .arg(
                     Arg::with_name("new")
                         .long("new")
                         .short("n")
-                        .takes_value(false),
+                        .takes_value(false)
+                        .help(
+                            "Creates a new suspended task instead of suspending an existing one.",
+                        ),
                 )
-                .arg(Arg::with_name("word").multiple(true)),
+                .arg(
+                    Arg::with_name("word")
+                        .multiple(true)
+                        .help("The name (or part of the name) of the task to be suspended."),
+                ),
         )
         .get_matches();
 
