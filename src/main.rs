@@ -404,6 +404,7 @@ fn main() {
                     .takes_value(false),
             ),
         )
+        .subcommand(SubCommand::with_name("ls"))
         .subcommand(SubCommand::with_name("become-notifier"))
         .subcommand(SubCommand::with_name("kill-notifier"))
         .subcommand(SubCommand::with_name("spawn-notifier"))
@@ -575,6 +576,15 @@ fn main() {
             let force = m.is_present("force");
             app.send_reminders(force);
             app.save();
+        }
+
+        ("ls", Some(_)) => {
+            let main_summary = app.job_board.get_summary();
+            let suspended_summary = app.job_board.suspended_stack_summary();
+            print!(
+                "Suspended jobs:\n\n{}\n\nMain jobs:\n\n{}\n",
+                suspended_summary, main_summary
+            )
         }
         (missing, Some(_)) => {
             unimplemented!("No implementation for subcommand {}", missing)
