@@ -465,7 +465,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
         )
         .subcommand(
             SubCommand::with_name("suspend")
-                .about("Moves a task from the active to the suspended queue.")
+                .about("Moves a task from the active stack to the suspended queue.")
                 .arg(
                     Arg::with_name("reason")
                         .long("reason")
