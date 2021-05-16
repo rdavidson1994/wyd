@@ -1,14 +1,7 @@
 use chrono::{serde::ts_seconds, DateTime, Duration, Local, Utc};
 use fs::File;
 use serde::{Deserialize, Serialize};
-use std::{
-    collections::VecDeque,
-    fmt::Display,
-    fs::{self, OpenOptions},
-    io::Write,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{cmp::Ordering, fmt::Display, fs::{self, OpenOptions}, io::Write, path::{Path, PathBuf}, process::Command};
 extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use notify_rust::Notification;
@@ -138,7 +131,7 @@ impl WydApplication {
             timer,
             last_notifiaction: None,
         };
-        self.job_board.suspended_stacks.push_back(new_stack)
+        self.job_board.add_suspended_stack(new_stack)
     }
 
     fn add_job(&mut self, job: Job) {
@@ -203,7 +196,7 @@ impl WydApplication {
 #[derive(Serialize, Deserialize, Clone, Default)]
 struct JobBoard {
     active_stack: JobStack,
-    suspended_stacks: VecDeque<SuspendedStack>,
+    suspended_stacks: Vec<SuspendedStack>,
 }
 
 trait StringMatch: FnMut(&str) -> bool {}
@@ -263,7 +256,7 @@ impl JobBoard {
             timer,
             last_notifiaction: None,
         };
-        self.suspended_stacks.push_back(suspended_stack);
+        self.add_suspended_stack(suspended_stack);
         Ok(())
     }
 
@@ -280,6 +273,27 @@ impl JobBoard {
         }
     }
 
+    fn add_suspended_stack(&mut self, stack: SuspendedStack) {
+        self.suspended_stacks.push(stack);
+        self.suspended_stacks.sort_by(|stack1, stack2| {
+            match (stack1.timer, stack2.timer) {
+                (None, None) => {
+                    stack1.date_suspended.cmp(&stack2.date_suspended)
+                }
+                (None, Some(_)) => {
+                    Ordering::Greater
+                }
+                (Some(_), None) => {
+                    Ordering::Less
+                }
+                (Some(timer1), Some(timer2)) => {
+                    timer1.cmp(&timer2)
+                }
+            }
+        })
+
+    }
+
     fn resume_matching(&mut self, mut pattern: impl StringMatch) -> Result<(), ()> {
         let mut found_index = self.suspended_stacks.len();
         for (i, stack) in self.suspended_stacks.iter().enumerate() {
@@ -292,15 +306,16 @@ impl JobBoard {
     }
 
     fn resume_at_index(&mut self, index: usize) -> Result<(), ()> {
-        match self.suspended_stacks.remove(index) {
-            Some(mut suspended_stack) => {
-                for mut job in &mut suspended_stack.data {
-                    job.begin_date = Utc::now();
-                }
-                self.active_stack.extend(suspended_stack.data);
-                Ok(())
+        if index >= self.suspended_stacks.len() {
+            Err(())
+        }
+        else {
+            let mut suspended_stack = self.suspended_stacks.remove(index);
+            for mut job in &mut suspended_stack.data {
+                job.begin_date = Utc::now();
             }
-            None => Err(()),
+            self.active_stack.extend(suspended_stack.data);
+            Ok(())
         }
     }
 
