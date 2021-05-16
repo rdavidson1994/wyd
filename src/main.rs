@@ -406,12 +406,26 @@ fn main() {
                 .about("Marks the top task of the stack as complete"),
         )
         .subcommand(
-            SubCommand::with_name("remind").arg(
-                Arg::with_name("force")
-                    .long("force")
-                    .short("f")
-                    .takes_value(false),
-            ),
+            {
+                let about = "Output reminders for expired timers".to_owned();
+                let about_extra = r#"
+
+If you are using the notifier (created with `wyd spawn-notifier`), you
+shouldn't need this subcommand very much - the notifer effectively runs
+it every second. You may still occassionally find the `--force` flag useful,
+since it re-triggers reminders that have already sent notifiactions recently.
+"#;
+                SubCommand::with_name("remind")
+                .about(about.clone().as_str())
+                .long_about((about + about_extra).as_str())
+                .arg(
+                    Arg::with_name("force")
+                        .long("force")
+                        .short("f")
+                        .takes_value(false)
+                        .help("Re-send all active reminders, even recently sent ones."),
+                )
+            },
         )
         .subcommand(
             SubCommand::with_name("ls")
