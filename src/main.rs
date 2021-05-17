@@ -340,13 +340,21 @@ impl JobBoard {
         for stack in &self.suspended_stacks {
             for (i, job) in stack.data.iter().enumerate() {
                 if i == 0 {
-                    output.push_str(&job.label);
-                    output.push_str(" (suspended at ");
-                    output.push_str(&format!(
-                        "{}",
-                        DateTime::<Local>::from(stack.date_suspended).format("%r")
-                    ));
-                    output.push_str(")");
+                    if let Some(timer) = stack.timer {
+                        let local_time = DateTime::<Local>::from(timer);
+                        output.push_str(&format!("{}", local_time.format("%a %F %r")));
+                        output.push_str(":  ");
+                        output.push_str(&job.label);
+                    }
+                    else {
+                        output.push_str(&job.label);
+                        output.push_str(" (suspended at ");
+                        output.push_str(&format!(
+                            "{}",
+                            DateTime::<Local>::from(stack.date_suspended).format("%a %F %r")
+                        ));
+                        output.push_str(")");
+                    }
                 } else {
                     output.push_str("    ");
                     output.push_str(&job.label);
