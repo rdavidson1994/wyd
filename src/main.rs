@@ -1,7 +1,13 @@
 use chrono::{serde::ts_seconds, DateTime, Duration, Local, Utc};
 use fs::File;
 use serde::{Deserialize, Serialize};
-use std::{fmt::Display, fs::{self, OpenOptions}, io::Write, path::{Path, PathBuf}, process::Command};
+use std::{
+    fmt::Display,
+    fs::{self, OpenOptions},
+    io::Write,
+    path::{Path, PathBuf},
+    process::Command,
+};
 extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use notify_rust::Notification;
@@ -301,8 +307,7 @@ impl JobBoard {
     fn resume_at_index(&mut self, index: usize) -> Result<(), ()> {
         if index >= self.suspended_stacks.len() {
             Err(())
-        }
-        else {
+        } else {
             let mut suspended_stack = self.suspended_stacks.remove(index);
             for mut job in &mut suspended_stack.data {
                 job.begin_date = Utc::now();
@@ -345,8 +350,7 @@ impl JobBoard {
                         output.push_str(&format!("{}", local_time.format("%a %F %r")));
                         output.push_str(":  ");
                         output.push_str(&job.label);
-                    }
-                    else {
+                    } else {
                         output.push_str(&job.label);
                         output.push_str(" (suspended at ");
                         output.push_str(&format!(
