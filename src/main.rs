@@ -1,7 +1,7 @@
 use chrono::{serde::ts_seconds, DateTime, Duration, Local, Utc};
 use fs::File;
 use serde::{Deserialize, Serialize};
-use std::{cmp::Ordering, fmt::Display, fs::{self, OpenOptions}, io::Write, path::{Path, PathBuf}, process::Command};
+use std::{fmt::Display, fs::{self, OpenOptions}, io::Write, path::{Path, PathBuf}, process::Command};
 extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
 use notify_rust::Notification;
@@ -273,25 +273,18 @@ impl JobBoard {
         }
     }
 
+    fn sort_suspended_stacks(&mut self) {
+        let now = Utc::now();
+        self.suspended_stacks.sort_by(|stack1, stack2| {
+            let timer1 = stack1.timer.unwrap_or(now);
+            let timer2 = stack2.timer.unwrap_or(now);
+            timer1.cmp(&timer2)
+        })
+    }
+
     fn add_suspended_stack(&mut self, stack: SuspendedStack) {
         self.suspended_stacks.push(stack);
-        self.suspended_stacks.sort_by(|stack1, stack2| {
-            match (stack1.timer, stack2.timer) {
-                (None, None) => {
-                    stack1.date_suspended.cmp(&stack2.date_suspended)
-                }
-                (None, Some(_)) => {
-                    Ordering::Greater
-                }
-                (Some(_), None) => {
-                    Ordering::Less
-                }
-                (Some(timer1), Some(timer2)) => {
-                    timer1.cmp(&timer2)
-                }
-            }
-        })
-
+        self.sort_suspended_stacks();
     }
 
     fn resume_matching(&mut self, mut pattern: impl StringMatch) -> Result<(), ()> {
@@ -658,6 +651,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
         }
 
         ("ls", Some(_)) => {
+            app.job_board.sort_suspended_stacks();
             let main_summary = app.job_board.get_summary();
             let suspended_summary = app.job_board.suspended_stack_summary();
             print!(
