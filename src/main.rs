@@ -365,9 +365,26 @@ impl JobBoard {
         output
     }
 
+    fn suspended_tasks_ready(&self) -> bool {
+        let now = Utc::now();
+        if let Some(task) = self.suspended_stacks.last() {
+            if let Some(timer) = task.timer {
+                if timer < now {
+                    true
+                } else {
+                    false
+                }
+            } else {
+                true
+            }
+        } else {
+            false
+        }
+    }
+
     fn empty_stack_message(&self) -> String {
         let mut output = String::new();
-        if self.suspended_stacks.len() > 0 {
+        if self.suspended_tasks_ready() {
             output.push_str("You finished your jobs in progress. Yay! Use `wyd resume` to resume the topmost suspended task:\n");
             output.push_str(&self.suspended_stack_summary())
         } else {
