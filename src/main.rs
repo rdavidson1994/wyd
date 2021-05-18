@@ -635,12 +635,12 @@ since it re-triggers reminders that have already sent notifiactions recently.
             app.save();
         }
         ("notifier", Some(m)) => {
-            let lock_path = app.app_dir.join(".kill-notifier");
+            let lock_path = app.app_dir.join(".notifier");
             if m.is_present("kill") {
                 File::create(lock_path)
-                    .expect("unable to create .kill-notifier file.")
+                    .expect("unable to create .notifier file.")
                     .write("kill".as_bytes())
-                    .expect("unable to write to .kill-notifier file.");
+                    .expect("unable to write to .notifier file.");
             } else if let Some(id_str) = m.value_of("become") {
                 let mut app_dir = app.app_dir;
                 let mut id_buf = Vec::<u8>::with_capacity(4);
@@ -663,17 +663,16 @@ since it re-triggers reminders that have already sent notifiactions recently.
             } else {
                 // Default usage - spawn the notifier process
                 if lock_path.exists() {
-                    fs::remove_file(app.app_dir.join(".kill-notifier"))
-                        .expect("Unable to delete .kill-notifier file.");
+                    fs::remove_file(&lock_path).expect("Unable to delete .notifier file.");
                 }
                 let id = Uuid::new_v4();
                 OpenOptions::new()
                     .create(true)
                     .write(true)
                     .open(&lock_path)
-                    .expect("unable to open .kill-notifier file.")
+                    .expect("Unable to open .notifier file.")
                     .write(id.as_bytes())
-                    .expect("unable to write .kill-notifier file.");
+                    .expect("Unable to write .notifier file.");
                 let exe_path =
                     std::env::current_exe().expect("unable to locate current executable.");
                 Command::new(exe_path)
