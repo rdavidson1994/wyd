@@ -9,7 +9,7 @@ use std::{
     process::Command,
 };
 extern crate clap;
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches, SubCommand};
+use clap::{crate_version, App, AppSettings, Arg, ArgMatches, ArgSettings, SubCommand};
 use notify_rust::Notification;
 use ron::ser::{self, PrettyConfig};
 use std::default::Default;
@@ -439,20 +439,18 @@ fn main() {
                 ),
         )
         .subcommand(
-            SubCommand::with_name("done")
-                .about("Marks the top task of the stack as complete"),
+            SubCommand::with_name("done").about("Marks the top task of the stack as complete"),
         )
-        .subcommand(
-            {
-                let about = "Output reminders for expired timers".to_owned();
-                let about_extra = r#"
+        .subcommand({
+            let about = "Output reminders for expired timers".to_owned();
+            let about_extra = r#"
 
 If you are using the notifier (created with `wyd spawn-notifier`), you
 shouldn't need this subcommand very much - the notifer effectively runs
 it every second. You may still occassionally find the `--force` flag useful,
 since it re-triggers reminders that have already sent notifiactions recently.
 "#;
-                SubCommand::with_name("remind")
+            SubCommand::with_name("remind")
                 .about(about.clone().as_str())
                 .long_about((about + about_extra).as_str())
                 .arg(
@@ -462,43 +460,33 @@ since it re-triggers reminders that have already sent notifiactions recently.
                         .takes_value(false)
                         .help("Re-send all active reminders, even recently sent ones."),
                 )
-            },
-        )
+        })
         .subcommand(
             SubCommand::with_name("ls")
                 .about("Prints a list of all tasks, including suspended ones."),
         )
         .subcommand(
-            SubCommand::with_name("become-notifier")
-                .setting(AppSettings::Hidden)
-
-//                 .about("For automation use. Do not call manually.")
-//                 .long_about(
-//                     r#"For automation use. Do not call manually.
-
-// Causes the process to enter an infinite loop, sending reminder notifiactions
-// about any new expired timers every second until a file named `.kill-notifier`
-// is found in the current working directory. Poorly suited for manual use,
-// because the process will hijack the terminal window and terminate if the
-// window is later closed. Regular users should use spawn-notifier instead.
-// "#,
-//                 ),
-        )
-        .subcommand(
-            SubCommand::with_name("kill-notifier")
-                .about("Kills any active notifier processes.")
-        )
-        .subcommand(
-            SubCommand::with_name("spawn-notifier")
+            SubCommand::with_name("notifier")
                 .about("Starts the notifier process, which sends wyd's reminder notifications.")
+                .arg(
+                    Arg::with_name("kill")
+                        .long("kill")
+                        .short("k")
+                        .takes_value(false)
+                        .help("Kills any active notifier processes."),
+                )
+                .arg(
+                    // Causes the active process to become the notifer.
+                    Arg::with_name("become")
+                        .long("become")
+                        .takes_value(false)
+                        .set(ArgSettings::Hidden),
+                ),
         )
         .subcommand(
             SubCommand::with_name("resume")
-                .arg(
-                    Arg::with_name("word")
-                        .multiple(true)
-                )
-                .about("Resumes a suspended task")
+                .arg(Arg::with_name("word").multiple(true))
+                .about("Resumes a suspended task"),
         )
         .subcommand(
             SubCommand::with_name("suspend")
@@ -645,33 +633,36 @@ since it re-triggers reminders that have already sent notifiactions recently.
             }
             app.save();
         }
-        ("become-notifier", Some(_)) => {
-            let mut app_dir = app.app_dir;
-            loop {
-                if app_dir.join(".kill-notifier").exists() {
-                    break;
+        ("notifier", Some(m)) => {
+            if m.is_present("kill") {
+                File::create(app.app_dir.join(".kill-notifier"))
+                    .expect("unable to create .kill-notifier file.");
+            } else if m.is_present("become") {
+                let mut app_dir = app.app_dir;
+                loop {
+                    if app_dir.join(".kill-notifier").exists() {
+                        break;
+                    }
+                    app = WydApplication::load(app_dir);
+                    app.send_reminders(false);
+                    app.save();
+                    app_dir = app.app_dir;
+                    std::thread::sleep(StdDuration::from_secs(1));
                 }
-                app = WydApplication::load(app_dir);
-                app.send_reminders(false);
-                app.save();
-                app_dir = app.app_dir;
-                std::thread::sleep(StdDuration::from_secs(1));
+            } else {
+                // Default usage - spawn the notifier process
+                if app.app_dir.join(".kill-notifier").exists() {
+                    fs::remove_file(app.app_dir.join(".kill-notifier"))
+                        .expect("Unable to delete .kill-notifier file.");
+                }
+                let exe_path =
+                    std::env::current_exe().expect("unable to locate current executable.");
+                Command::new(exe_path)
+                    .arg("notifier")
+                    .arg("--become")
+                    .spawn()
+                    .expect("Unable to spawn notifier process.");
             }
-        }
-        ("spawn-notifier", Some(_)) => {
-            if app.app_dir.join(".kill-notifier").exists() {
-                fs::remove_file(app.app_dir.join(".kill-notifier"))
-                    .expect("Unable to delete .kill-notifier file.");
-            }
-            let exe_path = std::env::current_exe().expect("unable to locate current executable.");
-            Command::new(exe_path)
-                .arg("become-notifier")
-                .spawn()
-                .expect("Unable to spawn notifier process.");
-        }
-        ("kill-notifier", Some(_)) => {
-            File::create(app.app_dir.join(".kill-notifier"))
-                .expect("unable to create .kill-notifier file.");
         }
         ("remind", Some(m)) => {
             let force = m.is_present("force");
