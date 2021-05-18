@@ -94,7 +94,7 @@ impl WydApplication {
     fn load(app_dir: PathBuf) -> WydApplication {
         let job_board = JobBoard::load(&app_dir);
         let icon_url =
-            Url::from_file_path(app_dir.join("wyd-icon.png")).expect("Unable to load icon");
+            Url::from_file_path(app_dir.join("wyd-icon.png")).expect("Unable to load icon.");
         WydApplication {
             app_dir,
             job_board,
@@ -164,7 +164,7 @@ impl WydApplication {
                     .timeout(0)
                     .appname("wyd")
                     .show()
-                    .expect("Unable to show notification");
+                    .expect("Unable to show notification.");
                 job.last_notifiaction = Some(Utc::now());
             }
         }
@@ -640,7 +640,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
                 File::create(lock_path)
                     .expect("unable to create .notifier file.")
                     .write("kill".as_bytes())
-                    .expect("unable to write to .notifier file.");
+                    .expect("Unable to write to .notifier file.");
             } else if let Some(id_str) = m.value_of("become") {
                 let mut app_dir = app.app_dir;
                 let mut id_buf = Vec::<u8>::with_capacity(4);
@@ -674,7 +674,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
                     .write(id.as_bytes())
                     .expect("Unable to write .notifier file.");
                 let exe_path =
-                    std::env::current_exe().expect("unable to locate current executable.");
+                    std::env::current_exe().expect("Unable to locate current executable.");
                 Command::new(exe_path)
                     .arg("notifier")
                     .arg("--become")
