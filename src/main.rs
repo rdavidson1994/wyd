@@ -4,10 +4,11 @@ use serde::{Deserialize, Serialize};
 use std::{
     fmt::Display,
     fs::{self, OpenOptions},
-    io::Write,
+    io::{Read, Write},
     path::{Path, PathBuf},
     process::Command,
 };
+use uuid::Uuid;
 extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, ArgSettings, SubCommand};
 use notify_rust::Notification;
@@ -479,7 +480,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
                     // Causes the active process to become the notifer.
                     Arg::with_name("become")
                         .long("become")
-                        .takes_value(false)
+                        .takes_value(true)
                         .set(ArgSettings::Hidden),
                 ),
         )
@@ -634,14 +635,24 @@ since it re-triggers reminders that have already sent notifiactions recently.
             app.save();
         }
         ("notifier", Some(m)) => {
+            let lock_path = app.app_dir.join(".kill-notifier");
             if m.is_present("kill") {
-                File::create(app.app_dir.join(".kill-notifier"))
-                    .expect("unable to create .kill-notifier file.");
-            } else if m.is_present("become") {
+                File::create(lock_path)
+                    .expect("unable to create .kill-notifier file.")
+                    .write("kill".as_bytes())
+                    .expect("unable to write to .kill-notifier file.");
+            } else if let Some(id_str) = m.value_of("become") {
                 let mut app_dir = app.app_dir;
+                let mut id_buf = Vec::<u8>::with_capacity(4);
+                id_buf.extend(ron::from_str::<Uuid>(id_str).unwrap().as_bytes());
                 loop {
-                    if app_dir.join(".kill-notifier").exists() {
-                        break;
+                    if lock_path.exists() {
+                        let mut lock_file = OpenOptions::new().read(true).open(&lock_path).unwrap();
+                        let mut file_bytes = Vec::<u8>::with_capacity(4);
+                        lock_file.read_to_end(&mut file_bytes).unwrap();
+                        if file_bytes.as_slice() != &id_buf {
+                            break;
+                        }
                     }
                     app = WydApplication::load(app_dir);
                     app.send_reminders(false);
@@ -651,15 +662,24 @@ since it re-triggers reminders that have already sent notifiactions recently.
                 }
             } else {
                 // Default usage - spawn the notifier process
-                if app.app_dir.join(".kill-notifier").exists() {
+                if lock_path.exists() {
                     fs::remove_file(app.app_dir.join(".kill-notifier"))
                         .expect("Unable to delete .kill-notifier file.");
                 }
+                let id = Uuid::new_v4();
+                OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .open(&lock_path)
+                    .expect("unable to open .kill-notifier file.")
+                    .write(id.as_bytes())
+                    .expect("unable to write .kill-notifier file.");
                 let exe_path =
                     std::env::current_exe().expect("unable to locate current executable.");
                 Command::new(exe_path)
                     .arg("notifier")
                     .arg("--become")
+                    .arg(ron::to_string(&id).unwrap())
                     .spawn()
                     .expect("Unable to spawn notifier process.");
             }
