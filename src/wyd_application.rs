@@ -15,8 +15,11 @@ use ron::ser::{self, PrettyConfig};
 
 use url::Url;
 
-use crate::job_board::{JobBoard, SuspendedStack};
 use crate::{job::Job, should_notify};
+use crate::{
+    job_board::{JobBoard, SuspendedStack},
+    substring_matcher,
+};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct WydApplication {
@@ -201,5 +204,30 @@ impl WydApplication {
             .arg(ron::to_string(&id).unwrap())
             .spawn()
             .expect("Unable to spawn notifier process.");
+    }
+
+    pub fn ls_job_board(&mut self) {
+        self.job_board.sort_suspended_stacks();
+        let main_summary = self.job_board.get_summary();
+        let suspended_summary = self.job_board.suspended_stack_summary();
+        print!(
+            "Suspended jobs:\n\n{}\n\nMain jobs:\n\n{}\n",
+            suspended_summary, main_summary
+        )
+    }
+
+    pub fn resume_job_named(&mut self, pattern: &str) {
+        let outcome = if pattern.is_empty() {
+            self.job_board.resume_at_index(0)
+        } else {
+            self.job_board.resume_matching(substring_matcher(&pattern))
+        };
+
+        if let Some(new_top) = outcome.ok().and(self.job_board.active_stack.last()) {
+            println!("Job resumed: {}", new_top);
+        } else {
+            eprintln!("No matching job to resume.");
+        }
+        self.save();
     }
 }

@@ -263,18 +263,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
 
         ("resume", Some(m)) => {
             let pattern = word_args_to_string(m);
-            let outcome = if pattern.is_empty() {
-                app.job_board.resume_at_index(0)
-            } else {
-                app.job_board.resume_matching(substring_matcher(&pattern))
-            };
-
-            if let Some(new_top) = outcome.ok().and(app.job_board.active_stack.last()) {
-                println!("Job resumed: {}", new_top);
-            } else {
-                eprintln!("No matching job to resume.");
-            }
-            app.save();
+            app.resume_job_named(&pattern);
         }
 
         ("notifier", Some(m)) => {
@@ -293,13 +282,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
         }
 
         ("ls", Some(_)) => {
-            app.job_board.sort_suspended_stacks();
-            let main_summary = app.job_board.get_summary();
-            let suspended_summary = app.job_board.suspended_stack_summary();
-            print!(
-                "Suspended jobs:\n\n{}\n\nMain jobs:\n\n{}\n",
-                suspended_summary, main_summary
-            )
+            app.ls_job_board();
         }
 
         (missing, Some(_)) => {
