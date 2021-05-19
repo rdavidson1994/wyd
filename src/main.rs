@@ -183,14 +183,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
                 None => None,
             };
 
-            let job = Job {
-                label,
-                begin_date: Utc::now(),
-                timebox,
-                last_notifiaction: None,
-            };
-            app.add_job(job);
-            app.save();
+            app.create_job(label, timebox);
         }
 
         ("suspend", Some(m)) => {

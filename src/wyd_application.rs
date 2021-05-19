@@ -96,12 +96,19 @@ impl WydApplication {
         self.job_board.add_suspended_stack(new_stack);
     }
 
-    pub fn add_job(&mut self, job: Job) {
+    pub fn create_job(&mut self, label: String, timebox: Option<std::time::Duration>) {
+        let job = Job {
+            label,
+            begin_date: Utc::now(),
+            timebox,
+            last_notifiaction: None,
+        };
         let mut log_line = String::new();
         log_line.push_str(&self.get_indent());
         log_line.push_str(&format!("{}", job));
         self.job_board.push(job);
         self.print(&log_line);
+        self.save();
     }
 
     fn lock_path(&self) -> PathBuf {
