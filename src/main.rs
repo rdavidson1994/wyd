@@ -294,7 +294,6 @@ since it re-triggers reminders that have already sent notifiactions recently.
         ("remind", Some(m)) => {
             let force = m.is_present("force");
             app.send_reminders(force);
-            app.save();
         }
 
         ("ls", Some(_)) => {

@@ -142,7 +142,9 @@ impl WydApplication {
                 .expect("Unable to show notification");
             stack.last_notifiaction = Some(Utc::now());
         }
+        self.save();
     }
+    
 
     // CLI methods:
 
@@ -169,7 +171,6 @@ impl WydApplication {
             }
             self = WydApplication::load(app_dir);
             self.send_reminders(false);
-            self.save();
             app_dir = self.app_dir;
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
