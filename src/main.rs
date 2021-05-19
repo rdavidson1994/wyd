@@ -5,23 +5,22 @@ use std::{
     fmt::Display,
     fs::{self, OpenOptions},
     io::{Read, Write},
-    path::{PathBuf},
     process::Command,
 };
 use uuid::Uuid;
 extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, ArgSettings, SubCommand};
-use notify_rust::Notification;
-use ron::ser::{self, PrettyConfig};
+
+
 use std::default::Default;
 use std::time::Duration as StdDuration;
-use url::Url;
+
 
 mod job;
 use job::Job;
 
 mod job_board;
-use job_board::{JobBoard, SuspendedStack};
+
 
 mod wyd_application;
 use wyd_application::WydApplication;
