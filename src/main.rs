@@ -1,18 +1,16 @@
 use chrono::{DateTime, Duration, Local, Utc};
-use fs::File;
+
 
 use std::{
     fmt::Display,
-    fs::{self, OpenOptions},
-    io::{Read, Write},
-    process::Command,
+    fs,
 };
-use uuid::Uuid;
+
 extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, ArgSettings, SubCommand};
 
 use std::default::Default;
-use std::time::Duration as StdDuration;
+pub(crate) use std::time::Duration as StdDuration;
 
 mod job;
 use job::Job;
@@ -284,52 +282,12 @@ since it re-triggers reminders that have already sent notifiactions recently.
         }
 
         ("notifier", Some(m)) => {
-            let lock_path = app.app_dir.join(".notifier");
             if m.is_present("kill") {
-                File::create(lock_path)
-                    .expect("unable to create .notifier file.")
-                    .write("kill".as_bytes())
-                    .expect("Unable to write to .notifier file.");
+                app.kill_notifier();
             } else if let Some(id_str) = m.value_of("become") {
-                let mut app_dir = app.app_dir;
-                let mut id_buf = Vec::<u8>::with_capacity(4);
-                id_buf.extend(ron::from_str::<Uuid>(id_str).unwrap().as_bytes());
-                loop {
-                    if lock_path.exists() {
-                        let mut lock_file = OpenOptions::new().read(true).open(&lock_path).unwrap();
-                        let mut file_bytes = Vec::<u8>::with_capacity(4);
-                        lock_file.read_to_end(&mut file_bytes).unwrap();
-                        if file_bytes.as_slice() != &id_buf {
-                            break;
-                        }
-                    }
-                    app = WydApplication::load(app_dir);
-                    app.send_reminders(false);
-                    app.save();
-                    app_dir = app.app_dir;
-                    std::thread::sleep(StdDuration::from_secs(1));
-                }
+                app.become_notifier(id_str);
             } else {
-                // Default usage - spawn the notifier process
-                if lock_path.exists() {
-                    fs::remove_file(&lock_path).expect("Unable to delete .notifier file.");
-                }
-                let id = Uuid::new_v4();
-                OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .open(&lock_path)
-                    .expect("Unable to open .notifier file.")
-                    .write(id.as_bytes())
-                    .expect("Unable to write .notifier file.");
-                let exe_path =
-                    std::env::current_exe().expect("Unable to locate current executable.");
-                Command::new(exe_path)
-                    .arg("notifier")
-                    .arg("--become")
-                    .arg(ron::to_string(&id).unwrap())
-                    .spawn()
-                    .expect("Unable to spawn notifier process.");
+                app.spawn_notifier();
             }
         }
 
