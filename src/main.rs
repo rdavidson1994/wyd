@@ -6,7 +6,6 @@ extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, ArgSettings, SubCommand};
 
 use std::default::Default;
-pub(crate) use std::time::Duration as StdDuration;
 
 mod job;
 use job::Job;
@@ -234,31 +233,8 @@ since it re-triggers reminders that have already sent notifiactions recently.
             app.save();
         }
 
-        ("done", Some(_)) => match app.job_board.pop() {
-            Some(job) => {
-                let duration = Local::now().signed_duration_since(job.begin_date);
-                let non_negative_dur = Duration::seconds(duration.num_seconds())
-                    .to_std()
-                    .unwrap_or(StdDuration::new(0, 0));
-                let duration_str = humantime::format_duration(non_negative_dur);
-
-                let log_line = format!(
-                    "{}Completed job \"{}\" (time elapsed: {})",
-                    app.get_indent(),
-                    job.label,
-                    duration_str
-                );
-                app.print(&log_line);
-                if let Some(new_job) = app.job_board.active_stack.last() {
-                    println!("{}", new_job)
-                } else {
-                    print!("{}", app.job_board.get_summary())
-                }
-                app.save();
-            }
-            None => {
-                print!("{}", app.job_board.empty_stack_message())
-            }
+        ("done", Some(_)) => {
+            app.complete_current_job();
         },
 
         ("resume", Some(m)) => {

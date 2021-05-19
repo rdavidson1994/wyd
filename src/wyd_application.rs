@@ -230,4 +230,33 @@ impl WydApplication {
         }
         self.save();
     }
+
+    pub fn complete_current_job(&mut self) {
+        match self.job_board.pop() {
+            Some(job) => {
+                let duration = Local::now().signed_duration_since(job.begin_date);
+                let non_negative_dur = chrono::Duration::seconds(duration.num_seconds())
+                    .to_std()
+                    .unwrap_or(std::time::Duration::new(0, 0));
+                let duration_str = humantime::format_duration(non_negative_dur);
+
+                let log_line = format!(
+                    "{}Completed job \"{}\" (time elapsed: {})",
+                    self.get_indent(),
+                    job.label,
+                    duration_str
+                );
+                self.print(&log_line);
+                if let Some(new_job) = self.job_board.active_stack.last() {
+                    println!("{}", new_job)
+                } else {
+                    print!("{}", self.job_board.get_summary())
+                }
+                self.save();
+            }
+            None => {
+                print!("{}", self.job_board.empty_stack_message())
+            }
+        }
+    }
 }
