@@ -79,7 +79,13 @@ impl WydApplication {
             .expect(&format!("Failed to write to log file at {:?}", log_path));
     }
 
-    pub fn add_suspended_job(&mut self, job: Job, reason: String, timer: Option<DateTime<Utc>>) {
+    pub fn create_suspended_job(&mut self, label: String, reason: String, timer: Option<DateTime<Utc>>) {
+        let job = Job {
+            label,
+            begin_date: Utc::now(),
+            timebox: None,
+            last_notifiaction: None,
+        };
         let new_stack = SuspendedStack {
             data: vec![job],
             reason,
@@ -87,7 +93,7 @@ impl WydApplication {
             timer,
             last_notifiaction: None,
         };
-        self.job_board.add_suspended_stack(new_stack)
+        self.job_board.add_suspended_stack(new_stack);
     }
 
     pub fn add_job(&mut self, job: Job) {
@@ -214,6 +220,19 @@ impl WydApplication {
             "Suspended jobs:\n\n{}\n\nMain jobs:\n\n{}\n",
             suspended_summary, main_summary
         )
+    }
+
+    pub fn suspend_job_named(&mut self, pattern: &str, reason: String, timer: Option<DateTime<Utc>>) {
+        let matcher = substring_matcher(&pattern);
+        if self
+            .job_board
+            .suspend_matching(matcher, reason, timer)
+            .is_ok()
+        {
+            println!("Job suspended.");
+        } else {
+            println!("No matching job to suspend.")
+        }
     }
 
     pub fn resume_job_named(&mut self, pattern: &str) {

@@ -211,24 +211,9 @@ since it re-triggers reminders that have already sent notifiactions recently.
             };
 
             if m.is_present("new") {
-                let job = Job {
-                    label: words,
-                    begin_date: Utc::now(),
-                    timebox: None,
-                    last_notifiaction: None,
-                };
-                app.add_suspended_job(job, reason, timer);
+                app.create_suspended_job(words, reason, timer);
             } else {
-                let matcher = substring_matcher(&words);
-                if app
-                    .job_board
-                    .suspend_matching(matcher, reason, timer)
-                    .is_ok()
-                {
-                    println!("Job suspended.");
-                } else {
-                    println!("No matching job to suspend.")
-                }
+                app.suspend_job_named(&words, reason, timer)
             }
             app.save();
         }
