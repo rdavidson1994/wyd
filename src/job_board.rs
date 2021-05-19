@@ -1,21 +1,18 @@
-use chrono::{serde::ts_seconds, DateTime, Duration, Local, Utc};
-use fs::File;
+use chrono::{serde::ts_seconds, DateTime, Local, Utc};
+
 use serde::{Deserialize, Serialize};
 use std::{
-    fmt::Display,
     fs::{self, OpenOptions},
-    io::{Read, Write},
-    path::{Path, PathBuf},
-    process::Command,
+    path::Path,
 };
-use uuid::Uuid;
+
 extern crate clap;
-use clap::{crate_version, App, AppSettings, Arg, ArgMatches, ArgSettings, SubCommand};
-use notify_rust::Notification;
-use ron::ser::{self, PrettyConfig};
+
+
+
 use std::default::Default;
-use std::time::Duration as StdDuration;
-use url::Url;
+
+
 
 use crate::{Job,StringMatch,default};
 
