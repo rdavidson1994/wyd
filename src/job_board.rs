@@ -31,8 +31,10 @@ pub struct SuspendedStack {
 
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct JobBoard {
-    pub /*todo - private*/ active_stack: JobStack,
-    pub /*todo -private*/ suspended_stacks: Vec<SuspendedStack>,
+    // todo - private
+    pub active_stack: JobStack,
+    // todo - private
+    pub suspended_stacks: Vec<SuspendedStack>,
 }
 
 impl JobBoard {
@@ -105,7 +107,8 @@ impl JobBoard {
         }
     }
 
-    pub /*todo - private*/ fn sort_suspended_stacks(&mut self) {
+    // todo - private
+    pub fn sort_suspended_stacks(&mut self) {
         let now = Utc::now();
         self.suspended_stacks.sort_by(|stack1, stack2| {
             let timer1 = stack1.timer.unwrap_or(now);
@@ -114,7 +117,8 @@ impl JobBoard {
         })
     }
 
-    pub /*todo - private*/ fn add_suspended_stack(&mut self, stack: SuspendedStack) {
+    // todo - private
+    pub fn add_suspended_stack(&mut self, stack: SuspendedStack) {
         self.suspended_stacks.push(stack);
         self.sort_suspended_stacks();
     }
@@ -155,7 +159,8 @@ impl JobBoard {
         self.active_stack.len()
     }
 
-    pub /*todo - private*/ fn get_summary(&self) -> String {
+    // todo - private
+    pub fn get_summary(&self) -> String {
         if self.num_active_jobs() == 0 {
             format!("{}", self.empty_stack_message())
         } else {
@@ -166,7 +171,8 @@ impl JobBoard {
         }
     }
 
-    pub /*todo - private*/fn suspended_stack_summary(&self) -> String {
+    // todo - private
+    pub fn suspended_stack_summary(&self) -> String {
         let mut output = String::new();
         for stack in &self.suspended_stacks {
             for (i, job) in stack.data.iter().enumerate() {
