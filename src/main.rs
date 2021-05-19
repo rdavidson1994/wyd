@@ -17,37 +17,10 @@ use std::default::Default;
 use std::time::Duration as StdDuration;
 use url::Url;
 
-const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
+mod job;
+use job::Job;
 
-#[derive(Serialize, Deserialize, Clone)]
-struct Job {
-    label: String,
-    #[serde(with = "ts_seconds")]
-    begin_date: DateTime<Utc>,
-    timebox: Option<StdDuration>,
-    last_notifiaction: Option<DateTime<Utc>>,
-}
-
-impl Job {
-    fn timebox_remaining(&self) -> Option<StdDuration> {
-        match self.timebox {
-            Some(timebox) => {
-                let dur_result = (self.begin_date
-                    + Duration::from_std(timebox).expect("Duration out of range.")
-                    - Utc::now())
-                .to_std();
-                match dur_result {
-                    Ok(dur) => Some(dur),
-                    Err(_) => Some(StdDuration::new(0, 0)),
-                }
-            }
-            None => None,
-        }
-    }
-    fn timebox_expired(&self) -> bool {
-        self.timebox_remaining() == Some(StdDuration::new(0, 0))
-    }
-}
+pub const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
 
 fn default<D: Default>() -> D {
     Default::default()
