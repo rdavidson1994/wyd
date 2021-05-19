@@ -11,16 +11,13 @@ use uuid::Uuid;
 extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, ArgSettings, SubCommand};
 
-
 use std::default::Default;
 use std::time::Duration as StdDuration;
-
 
 mod job;
 use job::Job;
 
 mod job_board;
-
 
 mod wyd_application;
 use wyd_application::WydApplication;
@@ -30,7 +27,6 @@ pub const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
 fn default<D: Default>() -> D {
     Default::default()
 }
-
 
 impl Display for Job {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {

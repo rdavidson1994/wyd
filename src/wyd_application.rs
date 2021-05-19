@@ -1,10 +1,9 @@
 use chrono::{DateTime, Local, Utc};
 
-
 use std::{
     fs::{self, OpenOptions},
-    io::{Write},
-    path::{PathBuf},
+    io::Write,
+    path::PathBuf,
 };
 
 extern crate clap;
@@ -12,12 +11,10 @@ extern crate clap;
 use notify_rust::Notification;
 use ron::ser::{self, PrettyConfig};
 
-
 use url::Url;
 
-use crate::{job::Job, should_notify};
 use crate::job_board::{JobBoard, SuspendedStack};
-
+use crate::{job::Job, should_notify};
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct WydApplication {

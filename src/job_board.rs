@@ -8,13 +8,9 @@ use std::{
 
 extern crate clap;
 
-
-
 use std::default::Default;
 
-
-
-use crate::{Job,StringMatch,default};
+use crate::{default, Job, StringMatch};
 
 type JobStack = Vec<Job>;
 
