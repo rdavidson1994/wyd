@@ -199,6 +199,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
             app.add_job(job);
             app.save();
         }
+
         ("suspend", Some(m)) => {
             let words = word_args_to_string(m);
             if words.is_empty() {
@@ -238,6 +239,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
             }
             app.save();
         }
+
         ("done", Some(_)) => match app.job_board.pop() {
             Some(job) => {
                 let duration = Local::now().signed_duration_since(job.begin_date);
@@ -264,6 +266,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
                 print!("{}", app.job_board.empty_stack_message())
             }
         },
+
         ("resume", Some(m)) => {
             let pattern = word_args_to_string(m);
             let outcome = if pattern.is_empty() {
@@ -279,6 +282,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
             }
             app.save();
         }
+
         ("notifier", Some(m)) => {
             let lock_path = app.app_dir.join(".notifier");
             if m.is_present("kill") {
@@ -328,6 +332,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
                     .expect("Unable to spawn notifier process.");
             }
         }
+
         ("remind", Some(m)) => {
             let force = m.is_present("force");
             app.send_reminders(force);
@@ -343,12 +348,15 @@ since it re-triggers reminders that have already sent notifiactions recently.
                 suspended_summary, main_summary
             )
         }
+
         (missing, Some(_)) => {
             unimplemented!("No implementation for subcommand {}", missing)
         }
+
         ("", None) => {
             print!("{}", app.job_board.get_summary());
         }
+
         (invalid, None) => {
             panic!("Invalid subcommand {}", invalid)
         }
