@@ -79,7 +79,12 @@ impl WydApplication {
             .expect(&format!("Failed to write to log file at {:?}", log_path));
     }
 
-    pub fn create_suspended_job(&mut self, label: String, reason: String, timer: Option<DateTime<Utc>>) {
+    pub fn create_suspended_job(
+        &mut self,
+        label: String,
+        reason: String,
+        timer: Option<DateTime<Utc>>,
+    ) {
         let job = Job {
             label,
             begin_date: Utc::now(),
@@ -229,7 +234,12 @@ impl WydApplication {
         )
     }
 
-    pub fn suspend_job_named(&mut self, pattern: &str, reason: String, timer: Option<DateTime<Utc>>) {
+    pub fn suspend_job_named(
+        &mut self,
+        pattern: &str,
+        reason: String,
+        timer: Option<DateTime<Utc>>,
+    ) {
         let matcher = substring_matcher(&pattern);
         if self
             .job_board
@@ -284,5 +294,9 @@ impl WydApplication {
                 print!("{}", self.job_board.empty_stack_message())
             }
         }
+    }
+
+    pub fn get_summary(&self) -> String {
+        self.job_board.get_summary()
     }
 }

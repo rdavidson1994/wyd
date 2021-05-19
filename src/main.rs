@@ -213,7 +213,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
 
         ("done", Some(_)) => {
             app.complete_current_job();
-        },
+        }
 
         ("resume", Some(m)) => {
             let pattern = word_args_to_string(m);
@@ -244,7 +244,7 @@ since it re-triggers reminders that have already sent notifiactions recently.
         }
 
         ("", None) => {
-            print!("{}", app.job_board.get_summary());
+            print!("{}", app.get_summary());
         }
 
         (invalid, None) => {
