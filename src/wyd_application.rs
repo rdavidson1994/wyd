@@ -1,7 +1,12 @@
 use chrono::{DateTime, Local, Utc};
 use uuid::Uuid;
 
-use std::{fs::{self, File, OpenOptions}, io::{Read, Write}, path::PathBuf, process::Command};
+use std::{
+    fs::{self, File, OpenOptions},
+    io::{Read, Write},
+    path::PathBuf,
+    process::Command,
+};
 
 extern crate clap;
 
@@ -144,7 +149,6 @@ impl WydApplication {
         }
         self.save();
     }
-    
 
     // CLI methods:
 
@@ -190,8 +194,7 @@ impl WydApplication {
             .expect("Unable to open .notifier file.")
             .write(id.as_bytes())
             .expect("Unable to write .notifier file.");
-        let exe_path =
-            std::env::current_exe().expect("Unable to locate current executable.");
+        let exe_path = std::env::current_exe().expect("Unable to locate current executable.");
         Command::new(exe_path)
             .arg("notifier")
             .arg("--become")
@@ -199,5 +202,4 @@ impl WydApplication {
             .spawn()
             .expect("Unable to spawn notifier process.");
     }
-
 }

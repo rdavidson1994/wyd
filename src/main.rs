@@ -1,10 +1,6 @@
 use chrono::{DateTime, Duration, Local, Utc};
 
-
-use std::{
-    fmt::Display,
-    fs,
-};
+use std::{fmt::Display, fs};
 
 extern crate clap;
 use clap::{crate_version, App, AppSettings, Arg, ArgMatches, ArgSettings, SubCommand};
