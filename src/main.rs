@@ -165,7 +165,7 @@ impl WydApplication {
     }
 }
 
-trait StringMatch: FnMut(&str) -> bool {}
+pub trait StringMatch: FnMut(&str) -> bool {}
 
 impl<T> StringMatch for T where T: FnMut(&str) -> bool {}
 
