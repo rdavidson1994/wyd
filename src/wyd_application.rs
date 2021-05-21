@@ -8,6 +8,8 @@ use std::{
     process::Command,
 };
 
+const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
+
 extern crate clap;
 
 use notify_rust::Notification;
@@ -15,18 +17,25 @@ use ron::ser::{self, PrettyConfig};
 
 use url::Url;
 
-use crate::{job::Job, should_notify};
+use crate::job::Job;
 use crate::{
     job_board::{JobBoard, SuspendedStack},
     substring_matcher,
 };
 
+fn should_notify(last_notified: &Option<DateTime<Utc>>) -> bool {
+    match last_notified {
+        Some(date) => {
+            Utc::now().signed_duration_since(*date).num_seconds() > MIN_NOTIFICATION_DELAY_SECONDS
+        }
+        None => true,
+    }
+}
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct WydApplication {
-    //todo - private
-    pub job_board: JobBoard,
-    // todo - private
-    pub app_dir: PathBuf,
+    job_board: JobBoard,
+    app_dir: PathBuf,
     icon_url: Url,
 }
 
@@ -49,14 +58,12 @@ impl WydApplication {
         }
     }
 
-    // todo - private
-    pub fn print(&self, message: &str) {
+    fn print(&self, message: &str) {
         self.append_to_log(&(message.to_owned() + "\n"));
         println!("{}", message.trim());
     }
 
-    // todo - private
-    pub fn get_indent(&self) -> String {
+    fn get_indent(&self) -> String {
         let mut output = String::new();
         for _ in &self.job_board.active_stack {
             output.push(' ');

@@ -15,8 +15,6 @@ mod job_board;
 mod wyd_application;
 use wyd_application::WydApplication;
 
-pub const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
-
 fn default<D: Default>() -> D {
     Default::default()
 }
@@ -45,16 +43,6 @@ fn word_args_to_string(args: &ArgMatches) -> String {
 
 fn substring_matcher(pattern: &str) -> impl Fn(&str) -> bool + '_ {
     move |s: &str| -> bool { s.contains(pattern) }
-}
-
-// todo - private to wyd_application module
-pub fn should_notify(last_notified: &Option<DateTime<Utc>>) -> bool {
-    match last_notified {
-        Some(date) => {
-            Utc::now().signed_duration_since(*date).num_seconds() > MIN_NOTIFICATION_DELAY_SECONDS
-        }
-        None => true,
-    }
 }
 
 fn main() {
