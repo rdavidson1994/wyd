@@ -140,10 +140,6 @@ fn main() {
 
         Suspend { words, reason, timebox, new } => {
             let words = words.join(" ");
-            if words.is_empty() {
-                eprintln!("Can't perform suspend without a label.");
-                return;
-            }
             let timer = if let Some(std_duration) = timebox {
                 let utc_date = Utc::now()
                     + Duration::from_std(std_duration)
@@ -155,6 +151,8 @@ fn main() {
 
             if new {
                 app.create_suspended_job(words, reason, timer);
+            } else if words.is_empty() {
+                app.suspend_current_job(reason, timer);
             } else {
                 app.suspend_job_named(&words, reason, timer);
             }

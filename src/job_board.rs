@@ -69,6 +69,10 @@ impl JobBoard {
         None
     }
 
+    pub fn suspend_current(&mut self, reason: String, timer: Option<DateTime<Utc>>)  -> Result<(), ()> {
+        self.suspend_at(self.active_stack.len() - 1, reason, timer)
+    }
+
     fn suspend_at(
         &mut self,
         index: usize,

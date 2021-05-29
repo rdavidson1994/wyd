@@ -241,6 +241,18 @@ impl WydApplication {
         )
     }
 
+    pub fn suspend_current_job(
+        &mut self,
+        reason: String,
+        timer: Option<DateTime<Utc>>
+    ) {
+        if self.job_board.suspend_current(reason, timer).is_ok() {
+            println!("Job suspended.");
+        } else {
+            println!("No job to suspend.")
+        }
+    }
+
     pub fn suspend_job_named(
         &mut self,
         pattern: &str,
