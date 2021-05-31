@@ -42,10 +42,6 @@ fn substring_matcher(pattern: &str) -> impl Fn(&str) -> bool + '_ {
 //     let matches = App::new("What You're Doing")
 //         .version(crate_version!())
 //         .settings(&[AppSettings::InferSubcommands])
-#[clap(name = "What You're Doing")]
-#[clap(version = crate_version!())]
-#[clap(setting = AppSettings::InferSubcommands)]
-
 enum Command {
     /// Add a new task to the top of the stack.
     Push {
@@ -111,6 +107,9 @@ enum Command {
 }
 
 #[derive(Clap, Debug)]
+#[clap(name = "What You're Doing")]
+#[clap(version = crate_version!())]
+#[clap(setting = AppSettings::InferSubcommands)]
 struct Arguments {
     #[clap(subcommand)]
     subcommand: Option<Command>,
