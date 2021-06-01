@@ -41,6 +41,14 @@ pub struct WydApplication {
 
 impl WydApplication {
     pub fn save(&self) {
+        match fs::copy(
+            self.app_dir.join("jobs.ron"),
+            self.app_dir.join("jobs.prev.ron"),
+        ) {
+            Ok(_) => (),
+            Err(io_error) => self.append_to_log(&io_error.to_string()),
+        };
+
         let new_file_text = ser::to_string_pretty(&self.job_board, PrettyConfig::new())
             .expect("Attempt to reserialize updated job list failed.");
         fs::write(self.app_dir.join("jobs.ron"), new_file_text)
