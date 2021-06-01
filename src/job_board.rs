@@ -69,7 +69,11 @@ impl JobBoard {
         None
     }
 
-    pub fn suspend_current(&mut self, reason: String, timer: Option<DateTime<Utc>>)  -> Result<(), ()> {
+    pub fn suspend_current(
+        &mut self,
+        reason: String,
+        timer: Option<DateTime<Utc>>,
+    ) -> Result<(), ()> {
         self.suspend_at(self.active_stack.len() - 1, reason, timer)
     }
 
@@ -216,6 +220,85 @@ impl JobBoard {
         } else {
             false
         }
+    }
+
+    fn pick_emojis(&self) -> (char, char) {
+        // Picks a couple of soothing emojis to reflect the current
+        // state of affairs. Currently a placeholder.
+        ('🌼', '🌸')
+    }
+
+    pub fn generate_html(&mut self) -> String {
+        self.sort_suspended_stacks();
+        // Should replace with a real templating engine later.
+        let emojis = self.pick_emojis();
+        let mut output = String::new();
+        output += &format!(
+            r##"
+            <!doctype html>
+            <html lang=en>
+            <head>
+            <link rel=icon href=wyd-icon.png type="image/png">
+            <meta charset=utf-8>
+            <meta http-equiv="refresh" content="30">
+            <title>How's it going?</title>
+            <link rel="stylesheet" href="wyd-homepage.css" />
+            </head>
+            <body>
+            <h1>{emoji_a}{emoji_b} Hello from Wyd {emoji_b}{emoji_a}</h1>
+            "##,
+            emoji_a = emojis.0,
+            emoji_b = emojis.1
+        );
+        let mut empty_summary = true;
+
+        let summary = &self.active_stack;
+        if summary.len() > 0 {
+            empty_summary = false;
+            output += r##"
+            <p>Looks like you've got the following stuff going on:</p>
+            <ul>"##;
+
+            for job in summary {
+                output += &format!(
+                    r##"
+                    <li>{line:#}</li>
+                    "##,
+                    line = job
+                );
+            }
+        }
+
+        if self.suspended_tasks_ready() {
+            empty_summary = false;
+            let summary = self.suspended_stack_summary();
+            output += r##"
+            <p>The following tasks are suspended:</p>
+            <ul>"##;
+
+            for job_line in summary.split('\n') {
+                output += &format!(
+                    r##"
+                    <li>{line}</li>
+                    "##,
+                    line = job_line
+                );
+            }
+        }
+
+        if empty_summary {
+            output += r"
+            <h2>Looks like you're all done. Yay!</h2>
+            ";
+        }
+
+        output += r##"
+        </ul>
+        </body>
+        </html>
+        "##;
+
+        output
     }
 
     pub fn empty_stack_message(&self) -> String {

@@ -51,7 +51,7 @@ enum Command {
         timebox: Option<StdDuration>,
 
         /// Name of the new task. Supports bare words like `wyd push Send emails`
-        words: Vec<String>
+        words: Vec<String>,
     },
 
     /// Moves a task from the active stack to the suspended queue.
@@ -71,7 +71,6 @@ enum Command {
 
         /// The name (or part of the name) of the task to be suspended.
         words: Vec<String>,
-
     },
 
     /// Marks the top task of the stack as complete
@@ -81,13 +80,11 @@ enum Command {
     Remind {
         /// Re-send all active reminders, even recently sent ones.
         #[clap(long, short)]
-        force: bool
+        force: bool,
     },
 
     /// Resumes a suspended task.
-    Resume {
-        words: Vec<String>,
-    },
+    Resume { words: Vec<String> },
 
     /// Prints the active task stack.
     Info,
@@ -102,8 +99,8 @@ enum Command {
         kill: bool,
         #[clap(long = "become", short)]
         #[clap(setting = ArgSettings::Hidden)]
-        become_id: Option<String>
-    }
+        become_id: Option<String>,
+    },
 }
 
 #[derive(Clap, Debug)]
@@ -137,7 +134,12 @@ fn main() {
             app.create_job(label, timebox);
         }
 
-        Suspend { words, reason, timebox, new } => {
+        Suspend {
+            words,
+            reason,
+            timebox,
+            new,
+        } => {
             let words = words.join(" ");
             let timer = if let Some(std_duration) = timebox {
                 let utc_date = Utc::now()

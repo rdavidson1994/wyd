@@ -191,6 +191,7 @@ impl WydApplication {
         let lock_path = self.lock_path();
         let mut app_dir = self.app_dir;
         let mut id_buf = Vec::<u8>::with_capacity(4);
+        let mut seconds: u8 = 0;
         id_buf.extend(ron::from_str::<Uuid>(id_str).unwrap().as_bytes());
         loop {
             if lock_path.exists() {
@@ -202,8 +203,12 @@ impl WydApplication {
                 }
             }
             self = WydApplication::load(app_dir);
+            if seconds % 64 == 0 {
+                self.write_html();
+            }
             self.send_reminders(false);
             app_dir = self.app_dir;
+            seconds = seconds.wrapping_add(1);
             std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
@@ -241,11 +246,7 @@ impl WydApplication {
         )
     }
 
-    pub fn suspend_current_job(
-        &mut self,
-        reason: String,
-        timer: Option<DateTime<Utc>>
-    ) {
+    pub fn suspend_current_job(&mut self, reason: String, timer: Option<DateTime<Utc>>) {
         if self.job_board.suspend_current(reason, timer).is_ok() {
             println!("Job suspended.");
         } else {
@@ -317,5 +318,16 @@ impl WydApplication {
 
     pub fn get_summary(&self) -> String {
         self.job_board.get_summary()
+    }
+
+    pub fn write_html(&mut self) {
+        let output = self.job_board.generate_html();
+        match fs::write(self.app_dir.join("wyd-homepage.html"), output) {
+            Ok(()) => (),
+            Err(x) => self.append_to_log(&format!(
+                "Could not write to html summary due to this error: {}",
+                x
+            )),
+        }
     }
 }
