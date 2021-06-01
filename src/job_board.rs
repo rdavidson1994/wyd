@@ -205,9 +205,9 @@ impl JobBoard {
         output
     }
 
-    fn suspended_tasks_ready(&self) -> bool {
+    pub fn suspended_tasks_ready(&self) -> bool {
         let now = Utc::now();
-        if let Some(task) = self.suspended_stacks.last() {
+        if let Some(task) = self.suspended_stacks.first() {
             if let Some(timer) = task.timer {
                 if timer < now {
                     true
