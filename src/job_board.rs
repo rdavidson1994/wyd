@@ -1,4 +1,4 @@
-use chrono::{serde::ts_seconds, DateTime, Local, Utc};
+use chrono::{serde::ts_seconds, DateTime, Duration, Local, Utc};
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -207,18 +207,34 @@ impl JobBoard {
 
     pub fn suspended_tasks_ready(&self) -> bool {
         let now = Utc::now();
-        if let Some(task) = self.suspended_stacks.first() {
-            if let Some(timer) = task.timer {
-                if timer < now {
-                    true
-                } else {
-                    false
-                }
-            } else {
-                true
+        let cutoff = now.checked_add_signed(Duration::hours(8));
+        let cutoff = match cutoff {
+            Some(time) => time,
+            None => {
+                // If a problem occurs while determining
+                // which tasks are ready to be worked,
+                // assume all tasks are ready so the user
+                // doesn't miss them.
+                return true;
             }
-        } else {
-            false
+        };
+
+        // Consider the closest upcoming suspended task.
+        match self.suspended_stacks.first() {
+            // If there are no suspended tasks, none are due
+            None => false,
+            Some(task) => match task.timer {
+                // Suspended tasks without timers are always
+                // ready to be worked.
+                None => true,
+
+                // Suspended tasks scheduled within 24 hours
+                // show up in the list.
+                Some(timer) if timer < cutoff => true,
+
+                // Later timers aren't displayed yet unless `ls` is used.
+                Some(_later_timer) => false,
+            },
         }
     }
 
@@ -277,12 +293,14 @@ impl JobBoard {
             <ul>"##;
 
             for job_line in summary.split('\n') {
-                output += &format!(
-                    r##"
-                    <li>{line}</li>
-                    "##,
-                    line = job_line
-                );
+                if !job_line.trim().is_empty() {
+                    output += &format!(
+                        r##"
+                        <li>{line}</li>
+                        "##,
+                        line = job_line
+                    );
+                }
             }
         }
 

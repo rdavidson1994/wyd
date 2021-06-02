@@ -1,4 +1,4 @@
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Duration, Local, Utc};
 use uuid::Uuid;
 
 use std::{
@@ -6,6 +6,7 @@ use std::{
     io::{Read, Write},
     path::PathBuf,
     process::Command,
+    time::Duration as StdDuration,
 };
 
 const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
@@ -39,7 +40,9 @@ pub struct WydApplication {
     icon_url: Url,
 }
 
+
 impl WydApplication {
+
     pub fn save(&self) {
         match fs::copy(
             self.app_dir.join("jobs.ron"),
@@ -116,10 +119,24 @@ impl WydApplication {
         self.job_board.add_suspended_stack(new_stack);
     }
 
-    pub fn create_job(&mut self, label: String, timebox: Option<std::time::Duration>) {
+    pub fn create_job(
+        &mut self,
+        label: String,
+        timebox: Option<StdDuration>,
+        retro: Option<StdDuration>,
+    ) {
+        let begin_date = if let Some(retro) = retro {
+            let dur =
+                Duration::from_std(retro).expect("Unable to convert duration to chrono format.");
+            Utc::now()
+                .checked_sub_signed(dur)
+                .expect("Unable to subtract duration from current date.")
+        } else {
+            Utc::now()
+        };
         let job = Job {
             label,
-            begin_date: Utc::now(),
+            begin_date,
             timebox,
             last_notifiaction: None,
         };
@@ -262,6 +279,29 @@ impl WydApplication {
         }
     }
 
+    pub fn apply_timebox(&mut self, timebox: Option<StdDuration>) {
+        if let Some(job) = self.job_board.active_stack.last_mut() {
+            job.timebox = timebox;
+            match timebox {
+                Some(timebox) => {
+                    let formatted_duration = humantime::format_duration(timebox);
+                    println!(
+                        "Applied timebox \"{t}\" to job \"{j}\"",
+                        t = formatted_duration,
+                        j = job.label
+                    );
+                }
+                None => {
+                    println!("Removed timebox from job \"{j}\"", j = job.label);
+                }
+            }
+
+            self.save();
+        } else {
+            println!("No active job to apply timebox to.");
+        }
+    }
+
     pub fn suspend_job_named(
         &mut self,
         pattern: &str,
@@ -295,7 +335,7 @@ impl WydApplication {
         self.save();
     }
 
-    pub fn complete_current_job(&mut self) {
+    pub fn complete_current_job(&mut self, cancelled: bool) {
         match self.job_board.pop() {
             Some(job) => {
                 let duration = Local::now().signed_duration_since(job.begin_date);
@@ -305,10 +345,11 @@ impl WydApplication {
                 let duration_str = humantime::format_duration(non_negative_dur);
 
                 let log_line = format!(
-                    "{}Completed job \"{}\" (time elapsed: {})",
-                    self.get_indent(),
-                    job.label,
-                    duration_str
+                    "{indent}{verb} job \"{j}\" (time elapsed: {t})",
+                    indent = self.get_indent(),
+                    verb = if cancelled { "Cancelled" } else { "Finished" },
+                    j = job.label,
+                    t = duration_str
                 );
                 self.print(&log_line);
                 if let Some(new_job) = self.job_board.active_stack.last() {

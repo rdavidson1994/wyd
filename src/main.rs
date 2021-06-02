@@ -1,4 +1,5 @@
 use chrono::{DateTime, Duration, Local, Utc};
+use chrono_english::Dialect;
 
 use std::{fmt::Display, fs, time::Duration as StdDuration};
 
@@ -38,6 +39,13 @@ fn substring_matcher(pattern: &str) -> impl Fn(&str) -> bool + '_ {
     move |s: &str| -> bool { s.contains(pattern) }
 }
 
+fn parse_date_or_dur(input: &str) -> anyhow::Result<StdDuration> {
+    let now = Local::now();
+    let future = chrono_english::parse_date_string(input, now, Dialect::Us)?;
+    let dur = future.signed_duration_since(now);
+    Ok(dur.to_std()?)
+}
+
 #[derive(Clap, Debug)]
 //     let matches = App::new("What You're Doing")
 //         .version(crate_version!())
@@ -50,6 +58,11 @@ enum Command {
         #[clap(parse(try_from_str = humantime::parse_duration))]
         timebox: Option<StdDuration>,
 
+        /// "Start" a job some time in the past
+        #[clap(long, short)]
+        #[clap(parse(try_from_str = humantime::parse_duration))]
+        retro: Option<StdDuration>,
+
         /// Name of the new task. Supports bare words like `wyd push Send emails`
         words: Vec<String>,
     },
@@ -58,7 +71,7 @@ enum Command {
     Suspend {
         /// Sets a timer, after which the suspended task will send reminders.
         #[clap(long, short)]
-        #[clap(parse(try_from_str = humantime::parse_duration))]
+        #[clap(parse(try_from_str = parse_date_or_dur))]
         timebox: Option<StdDuration>,
 
         /// Creates a new suspended task instead of suspending an existing one.
@@ -74,7 +87,11 @@ enum Command {
     },
 
     /// Marks the top task of the stack as complete
-    Done,
+    Done {
+        /// Marks the task as cancelled instead of complete
+        #[clap(long, short)]
+        cancelled: bool,
+    },
 
     /// Output reminders for expired timers
     Remind {
@@ -101,6 +118,18 @@ enum Command {
         #[clap(setting = ArgSettings::Hidden)]
         become_id: Option<String>,
     },
+
+    /// Applies a new timebox to the current active task
+    Timebox {
+        /// The new timebox (e.g. 1h5m30s)
+        #[clap(parse(try_from_str = humantime::parse_duration))]
+        #[clap(group("my_group"))]
+        timebox: Option<StdDuration>,
+
+        /// Removes the current timebox instead of applying a new one.
+        #[clap(long, short)]
+        remove: bool,
+    },
 }
 
 #[derive(Clap, Debug)]
@@ -125,13 +154,17 @@ fn main() {
     let subcommand = args.subcommand.unwrap_or(Command::Info);
     use Command::*;
     match subcommand {
-        Push { timebox, words } => {
+        Push {
+            timebox,
+            retro,
+            words,
+        } => {
             let label = words.join(" ");
             if label.is_empty() {
                 eprintln!("Can't create a job without a label.");
                 return;
             }
-            app.create_job(label, timebox);
+            app.create_job(label, timebox, retro);
         }
 
         Suspend {
@@ -160,8 +193,8 @@ fn main() {
             app.save();
         }
 
-        Done => {
-            app.complete_current_job();
+        Done { cancelled } => {
+            app.complete_current_job(cancelled);
         }
 
         Resume { words } => {
@@ -189,6 +222,16 @@ fn main() {
 
         Info => {
             print!("{}", app.get_summary());
+        }
+
+        Timebox { timebox, remove } => {
+            if timebox.is_some() && remove {
+                eprintln!("Cannot specify a new timebox while using the --remove flag.");
+            } else if timebox.is_none() && !remove {
+                eprintln!("Must specify a new timebox unless using the --remove flag.");
+            } else {
+                app.apply_timebox(timebox);
+            }
         }
     };
 }
