@@ -82,10 +82,14 @@ impl WydApplication {
         output
     }
 
-    fn append_to_log(&self, text: &str) {
+    fn current_log_path(&self) -> PathBuf {
         let date = Local::now();
         let log_file_name = format!("{}", date.format("wyd-%F.log"));
-        let log_path = self.app_dir.join(log_file_name);
+        self.app_dir.join(log_file_name)
+    }
+
+    fn append_to_log(&self, text: &str) {
+        let log_path = self.current_log_path();
 
         let mut file = OpenOptions::new()
             .create(true)
@@ -378,5 +382,12 @@ impl WydApplication {
                 x
             )),
         }
+    }
+
+    pub fn print_log(&self) {
+        let log_path = self.current_log_path();
+        let log_content = fs::read_to_string(log_path)
+            .unwrap_or("[Today's log is empty]".to_owned());
+        println!("{}",log_content);
     }
 }

@@ -130,6 +130,9 @@ enum Command {
         #[clap(long, short)]
         remove: bool,
     },
+
+    /// Prints today's log file
+    Log
 }
 
 #[derive(Clap, Debug)]
@@ -232,6 +235,10 @@ fn main() {
             } else {
                 app.apply_timebox(timebox);
             }
+        }
+
+        Log => {
+            app.print_log();
         }
     };
 }
