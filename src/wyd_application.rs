@@ -306,6 +306,23 @@ impl WydApplication {
         }
     }
 
+    pub fn print_current_timebox(&self) {
+        if let Some(job) = self.job_board.active_stack.last() {
+            if let Some(timebox) = job.timebox {
+                let timebox = match chrono::Duration::from_std(timebox) {
+                    Ok(timebox) => timebox,
+                    Err(_) => todo!(),
+                };
+                let expiry_utc = match job.begin_date.checked_add_signed(timebox) {
+                    Some(expiry) => expiry,
+                    None => todo!(),
+                };
+                let expiry = chrono::DateTime::<Local>::from(expiry_utc);
+                println!("Current timebox: {}", expiry.format("%a %F %r"))
+            }
+        }
+    }
+
     pub fn suspend_job_named(
         &mut self,
         pattern: &str,

@@ -123,7 +123,6 @@ enum Command {
     Timebox {
         /// The new timebox (e.g. 1h5m30s)
         #[clap(parse(try_from_str = humantime::parse_duration))]
-        #[clap(group("my_group"))]
         timebox: Option<StdDuration>,
 
         /// Removes the current timebox instead of applying a new one.
@@ -231,7 +230,7 @@ fn main() {
             if timebox.is_some() && remove {
                 eprintln!("Cannot specify a new timebox while using the --remove flag.");
             } else if timebox.is_none() && !remove {
-                eprintln!("Must specify a new timebox unless using the --remove flag.");
+                app.print_current_timebox();
             } else {
                 app.apply_timebox(timebox);
             }
