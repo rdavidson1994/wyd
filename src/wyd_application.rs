@@ -40,9 +40,7 @@ pub struct WydApplication {
     icon_url: Url,
 }
 
-
 impl WydApplication {
-
     pub fn save(&self) {
         match fs::copy(
             self.app_dir.join("jobs.ron"),
@@ -138,12 +136,27 @@ impl WydApplication {
         } else {
             Utc::now()
         };
+
+        if let Some(Job {
+            timebox: Some(_), ..
+        }) = self.job_board.active_stack.last()
+        {
+            // Timeboxed tasks cannot have subtasks
+            eprintln!(
+                "Current job has a timebox. \
+                Finish the task or remove the timebox before \
+                Creating a sub task."
+            );
+            return;
+        }
+
         let job = Job {
             label,
             begin_date,
             timebox,
             last_notifiaction: None,
         };
+
         let mut log_line = String::new();
         log_line.push_str(&self.get_indent());
         log_line.push_str(&format!("{}", job));
@@ -403,8 +416,8 @@ impl WydApplication {
 
     pub fn print_log(&self) {
         let log_path = self.current_log_path();
-        let log_content = fs::read_to_string(log_path)
-            .unwrap_or("[Today's log is empty]".to_owned());
-        println!("{}",log_content);
+        let log_content =
+            fs::read_to_string(log_path).unwrap_or("[Today's log is empty]".to_owned());
+        println!("{}", log_content);
     }
 }

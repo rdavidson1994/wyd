@@ -131,7 +131,7 @@ enum Command {
     },
 
     /// Prints today's log file
-    Log
+    Log,
 }
 
 #[derive(Clap, Debug)]
