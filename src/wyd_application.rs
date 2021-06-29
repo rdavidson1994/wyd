@@ -42,14 +42,18 @@ pub struct WydApplication {
 
 impl WydApplication {
     pub fn save(&self) {
-        match fs::copy(
+        // Create a backup copy of the jobs file before we overwrite it
+        let copy_result = fs::copy(
             self.app_dir.join("jobs.ron"),
-            self.app_dir.join("jobs.prev.ron"),
-        ) {
-            Ok(_) => (),
-            Err(io_error) => self.append_to_log(&io_error.to_string()),
-        };
+            self.current_backup_path(),
+        );
 
+        // Add any resulting errors from this copy to the log
+        if let Err(io_error) = copy_result {
+            self.append_to_log(&io_error.to_string())
+        }
+
+        // Serialize the current job board, and write the result into jobs.ron
         let new_file_text = ser::to_string_pretty(&self.job_board, PrettyConfig::new())
             .expect("Attempt to reserialize updated job list failed.");
         fs::write(self.app_dir.join("jobs.ron"), new_file_text)
@@ -83,6 +87,12 @@ impl WydApplication {
     fn current_log_path(&self) -> PathBuf {
         let date = Local::now();
         let log_file_name = format!("{}", date.format("wyd-%F.log"));
+        self.app_dir.join(log_file_name)
+    }
+
+    fn current_backup_path(&self) -> PathBuf {
+        let date = Local::now();
+        let log_file_name = format!("{}", date.format("jobs-archive-%F.ron"));
         self.app_dir.join(log_file_name)
     }
 
