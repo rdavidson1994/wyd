@@ -89,6 +89,12 @@ enum Command {
         words: Vec<String>,
     },
 
+    /// Alias of `push -t 5m`
+    FiveMinutes {
+        /// Name of new task, similar to `push`
+        words: Vec<String>,
+    },
+
     /// Moves a task from the active stack to the suspended queue.
     Suspend {
         /// Sets a timer, after which the suspended task will send reminders.
@@ -189,6 +195,10 @@ fn main() {
                 return;
             }
             app.create_job(label, timebox, retro);
+        }
+
+        FiveMinutes { words } => {
+            app.create_job(words.join(" "), Some(StdDuration::from_secs(5 * 60)), None);
         }
 
         Suspend {
