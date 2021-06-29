@@ -9,8 +9,6 @@ use std::{
     time::Duration as StdDuration,
 };
 
-const MIN_NOTIFICATION_DELAY_SECONDS: i64 = 60 * 3;
-
 extern crate clap;
 
 use notify_rust::Notification;
@@ -25,12 +23,10 @@ use crate::{
 };
 
 fn should_notify(last_notified: &Option<DateTime<Utc>>) -> bool {
-    match last_notified {
-        Some(date) => {
-            Utc::now().signed_duration_since(*date).num_seconds() > MIN_NOTIFICATION_DELAY_SECONDS
-        }
-        None => true,
-    }
+    // We only send one notification to avoid spam.
+    // Later, we can think about sequence of contingency notifications,
+    // But for now this is the simplest way.
+    last_notified.is_none()
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
