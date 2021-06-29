@@ -22,11 +22,33 @@ fn default<D: Default>() -> D {
 
 impl Display for Job {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        if self.timebox_expired() {
+            f.write_str("(!) ")?;
+        }
         f.write_str(&self.label)?;
         f.write_str(" | started at ")?;
         let local_time = DateTime::<Local>::from(self.begin_date);
         let formatted_date = local_time.format("%r");
         formatted_date.fmt(f)?;
+        let chrono_timebox = match self.timebox {
+            Some(std_timebox) => match Duration::from_std(std_timebox) {
+                Ok(chrono_timebox) => Some(chrono_timebox),
+                Err(_out_of_range) => Some(Duration::seconds(0)),
+            },
+            None => None,
+        };
+        if let Some(chrono_timebox) = chrono_timebox {
+            let time_elapsed = Local::now().signed_duration_since(self.begin_date);
+            let time_remaining = chrono_timebox - time_elapsed;
+            if let Ok(std_dur) = time_remaining.to_std() {
+                f.write_str(" | timebox remaining : ")?;
+                let rounded_dur = StdDuration::from_secs(std_dur.as_secs());
+                let formatted_dur = humantime::format_duration(rounded_dur);
+                formatted_dur.fmt(f)?;
+            } else {
+                f.write_str(" | timebox expired")?;
+            }
+        }
         Ok(())
     }
 }

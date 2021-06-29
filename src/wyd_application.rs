@@ -313,6 +313,10 @@ impl WydApplication {
                 }
             }
 
+            // Refresh the job's begin date, so that the timebox
+            // just applied is measured from now
+            job.begin_date = Utc::now();
+
             self.save();
         } else {
             println!("No active job to apply timebox to.");
