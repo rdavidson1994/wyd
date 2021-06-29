@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, Local, Utc};
 use chrono_english::Dialect;
 
-use std::{fmt::Display, fs, time::Duration as StdDuration};
+use std::{fmt::Display, fs, thread, time::Duration as StdDuration};
 
 extern crate clap;
 use clap::{crate_version, AppSettings, ArgSettings, Clap};
@@ -160,6 +160,16 @@ enum Command {
 
     /// Prints today's log file
     Log,
+
+    /// Starts a countdown for mindfulness
+    Meditate {
+        #[clap(long, short)]
+        #[clap(default_value = "20")]
+        seconds: i32,
+
+        #[clap(long, short)]
+        intent: Option<String>
+    }
 }
 
 #[derive(Clap, Debug)]
@@ -270,6 +280,16 @@ fn main() {
 
         Log => {
             app.print_log();
+        }
+
+        Meditate { seconds, intent } => {
+            for i in 0..seconds {
+                println!("{}", seconds-i);
+                thread::sleep(StdDuration::from_secs(1));
+            }
+            if let Some(intent) = intent {
+                println!("{}", intent);
+            }
         }
     };
 }
