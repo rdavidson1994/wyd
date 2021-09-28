@@ -1,13 +1,7 @@
 use chrono::{DateTime, Duration, Local, Utc};
 use uuid::Uuid;
 
-use std::{
-    fs::{self, File, OpenOptions},
-    io::{Read, Write},
-    path::PathBuf,
-    process::Command,
-    time::Duration as StdDuration,
-};
+use std::{fmt::Display, fs::{self, File, OpenOptions}, io::{Read, Write}, path::PathBuf, process::Command, time::Duration as StdDuration};
 
 extern crate clap;
 
@@ -166,9 +160,21 @@ impl WydApplication {
         let mut log_line = String::new();
         log_line.push_str(&self.get_indent());
         log_line.push_str(&format!("{}", job));
-        self.job_board.push(job);
         self.print(&log_line);
+        self.job_board.push(job);
         self.save();
+    }
+
+    fn indent(&self, text: impl Display) -> String {
+        let mut log_line = String::new();
+        log_line.push_str(&self.get_indent());
+        log_line.push_str(&format!("{}", text));
+        log_line
+    }
+
+    fn timestamp(&self, text: impl Display) -> String {
+        let timestamp =  Local::now().format("%r");
+        format!("{}: {}", timestamp, text)
     }
 
     fn lock_path(&self) -> PathBuf {
@@ -429,5 +435,10 @@ impl WydApplication {
         let log_content =
             fs::read_to_string(log_path).unwrap_or("[Today's log is empty]".to_owned());
         println!("{}", log_content);
+    }
+
+    pub fn add_log_note(&self, content: String) -> () {
+        let formatted_content = self.indent(self.timestamp(content));
+        self.append_to_log(&(formatted_content+"\n"))
     }
 }

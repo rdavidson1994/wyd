@@ -169,6 +169,12 @@ enum Command {
 
         #[clap(long, short)]
         intent: Option<String>
+    },
+
+    /// Adds a message to today's log
+    Jot {
+        /// List of words forming the content of the message.
+        words: Vec<String>,
     }
 }
 
@@ -290,6 +296,11 @@ fn main() {
             if let Some(intent) = intent {
                 println!("{}", intent);
             }
+        }
+
+        Jot { words } => {
+            let content = words.join(" ");
+            app.add_log_note(content);
         }
     };
 }
