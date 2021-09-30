@@ -1,14 +1,25 @@
+use anyhow::{Result};
 use chrono::{DateTime, Duration, Local, Utc};
 use uuid::Uuid;
 
-use std::{fmt::Display, fs::{self, File, OpenOptions}, io::{Read, Write}, path::PathBuf, process::Command, time::Duration as StdDuration};
+use std::{
+    fmt::Display,
+    fs::{self, File, OpenOptions},
+    io::{Read, Write},
+    path::PathBuf,
+    process::Command,
+    time::Duration as StdDuration,
+};
 
 extern crate clap;
 
-use notify_rust::Notification;
+// use notify_rust::Notification;
 use ron::ser::{self, PrettyConfig};
 
 use url::Url;
+
+use std::io::BufReader;
+use rodio::{Decoder, OutputStream, source::Source};
 
 use crate::job::Job;
 use crate::{
@@ -20,7 +31,32 @@ fn should_notify(last_notified: &Option<DateTime<Utc>>) -> bool {
     // We only send one notification to avoid spam.
     // Later, we can think about sequence of contingency notifications,
     // But for now this is the simplest way.
-    last_notified.is_none()
+    let last_notified = match last_notified {
+        Some(date) => date,
+        None => return true,
+    };
+    if Utc::now().signed_duration_since(*last_notified) > Duration::seconds(30) {
+        true
+    } else {
+        false
+    }
+}
+
+fn create_notification(_summary: &str, _body: &str) -> Result<()> {
+    // Notification::new()
+    //     .summary(summary)
+    //     .body(body)
+    //     .timeout(0)
+    //     .appname("wyd");
+        // .show()
+        // .context("Unable to show notification")?;
+
+    let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+    let file = BufReader::new(File::open(r"C:\Windows\Media\Alarm01.wav").unwrap());
+    let source = Decoder::new(file).unwrap();
+    stream_handle.play_raw(source.convert_samples())?;
+    std::thread::sleep(std::time::Duration::from_secs(5));
+    Ok(())
 }
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -33,10 +69,7 @@ pub struct WydApplication {
 impl WydApplication {
     pub fn save(&self) {
         // Create a backup copy of the jobs file before we overwrite it
-        let copy_result = fs::copy(
-            self.app_dir.join("jobs.ron"),
-            self.current_backup_path(),
-        );
+        let copy_result = fs::copy(self.app_dir.join("jobs.ron"), self.current_backup_path());
 
         // Add any resulting errors from this copy to the log
         if let Err(io_error) = copy_result {
@@ -173,7 +206,7 @@ impl WydApplication {
     }
 
     fn timestamp(&self, text: impl Display) -> String {
-        let timestamp =  Local::now().format("%r");
+        let timestamp = Local::now().format("%r");
         format!("{}: {}", timestamp, text)
     }
 
@@ -182,25 +215,30 @@ impl WydApplication {
     }
 
     pub fn send_reminders(&mut self, force: bool) {
+        let mut timeboxes_expired = vec![];
         for mut job in &mut self.job_board.active_stack {
             if job.timebox_expired() {
                 if !force && !should_notify(&job.last_notifiaction) {
                     continue;
                 }
-                Notification::new()
-                    .summary("Expired timebox")
-                    .body(&format!(
-                        "The timebox for task \"{}\" has expired.",
-                        job.label
-                    ))
-                    .timeout(0)
-                    .appname("wyd")
-                    .show()
-                    .expect("Unable to show notification.");
+                timeboxes_expired.push(job.label.clone());
+
                 job.last_notifiaction = Some(Utc::now());
             }
         }
-        for mut stack in &mut self.job_board.suspended_stacks {
+
+        for job_name in timeboxes_expired {
+            create_notification(
+                "Expired timebox",
+                &format!("The timebox for task \"{}\" has expired.", job_name),
+            ).unwrap_or_else(|error| {
+                self.append_to_log(&format!("{:#}", error.context("Failed to send notification")))
+            });
+        }
+
+        let mut notifications_to_send = vec![];
+
+        for stack in &mut self.job_board.suspended_stacks {
             let timer_exhausted = match stack.timer {
                 Some(timer) => timer < Utc::now(),
                 None => false,
@@ -217,19 +255,22 @@ impl WydApplication {
                 None => "[[Empty Job Stack D:]]".to_string(),
             };
 
-            Notification::new()
-                .summary("Timer!")
-                .body(&format!(
-                    "Reminder about this suspended task: \"{}\".\nSuspension reason: \"{}\"",
-                    first_job_string, stack.reason
-                ))
-                .timeout(0)
-                .appname("wyd")
-                .show()
-                .expect("Unable to show notification");
-            stack.last_notifiaction = Some(Utc::now());
+            notifications_to_send.push(format!(
+                "Reminder about this suspended task\
+                : \"{}\".\nSuspension reason: \"{}\"",
+                first_job_string, stack.reason
+            ));
         }
         self.save();
+
+        for notification in notifications_to_send {
+            create_notification(
+                "Timer!",
+                &notification
+            ).unwrap_or_else(|error| {
+                self.append_to_log(&format!("{:#}", error.context("Failed to send notification")))
+            });
+        }
     }
 
     // CLI methods:
@@ -439,6 +480,6 @@ impl WydApplication {
 
     pub fn add_log_note(&self, content: String) -> () {
         let formatted_content = self.indent(self.timestamp(content));
-        self.append_to_log(&(formatted_content+"\n"))
+        self.append_to_log(&(formatted_content + "\n"))
     }
 }

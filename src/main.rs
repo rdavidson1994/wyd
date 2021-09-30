@@ -168,14 +168,14 @@ enum Command {
         seconds: i32,
 
         #[clap(long, short)]
-        intent: Option<String>
+        intent: Option<String>,
     },
 
     /// Adds a message to today's log
     Jot {
         /// List of words forming the content of the message.
         words: Vec<String>,
-    }
+    },
 }
 
 #[derive(Clap, Debug)]
@@ -290,7 +290,7 @@ fn main() {
 
         Meditate { seconds, intent } => {
             for i in 0..seconds {
-                println!("{}", seconds-i);
+                println!("{}", seconds - i);
                 thread::sleep(StdDuration::from_secs(1));
             }
             if let Some(intent) = intent {
