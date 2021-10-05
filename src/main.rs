@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration, Local, Utc};
 use chrono_english::Dialect;
 
-use std::{fmt::Display, fs, thread, time::Duration as StdDuration};
+use std::{fmt::Display, fs::{self, OpenOptions}, io::Write, thread, time::Duration as StdDuration};
 
 extern crate clap;
 use clap::{crate_version, AppSettings, ArgSettings, Clap};
@@ -15,6 +15,10 @@ mod job_board;
 
 mod wyd_application;
 use wyd_application::WydApplication;
+
+use anyhow::Context;
+
+use crate::job_board::WorkState;
 
 fn default<D: Default>() -> D {
     Default::default()
@@ -176,6 +180,13 @@ enum Command {
         /// List of words forming the content of the message.
         words: Vec<String>,
     },
+
+    /// Enters work mode (sends reminders every few minutes if no timebox is set.)
+    Work {
+        /// Exits work mode
+        #[clap(long, short)]
+        done: bool,
+    }
 }
 
 #[derive(Clap, Debug)]
@@ -188,14 +199,25 @@ struct Arguments {
 }
 
 fn main() {
+    match perform_work() {
+        Ok(()) => {
+            // Done
+        },
+        Err(error) => {
+            handle_error(error)
+        }
+    }
+}
+
+fn perform_work() -> anyhow::Result<()> {
     let args = Arguments::parse();
 
     let app_dir = dirs::data_local_dir()
-        .expect("Could not locate current user's app data folder.")
+        .context("Could not locate current user's app data folder.")?
         .join(".wyd");
 
-    fs::create_dir_all(&app_dir).expect("Could not create application directory");
-    let mut app = WydApplication::load(app_dir);
+    fs::create_dir_all(&app_dir).context("Could not create application directory")?;
+    let mut app = WydApplication::load(app_dir).context("Failed to load application state from app directory.")?;
 
     let subcommand = args.subcommand.unwrap_or(Command::Info);
     use Command::*;
@@ -208,13 +230,13 @@ fn main() {
             let label = words.join(" ");
             if label.is_empty() {
                 eprintln!("Can't create a job without a label.");
-                return;
+                return Ok(());
             }
-            app.create_job(label, timebox, retro);
+            app.create_job(label, timebox, retro)?;
         }
 
         FiveMinutes { words } => {
-            app.create_job(words.join(" "), Some(StdDuration::from_secs(5 * 60)), None);
+            app.create_job(words.join(" "), Some(StdDuration::from_secs(5 * 60)), None)?;
         }
 
         Suspend {
@@ -240,30 +262,30 @@ fn main() {
             } else {
                 app.suspend_job_named(&words, reason, timer);
             }
-            app.save();
+            app.save().context("Unable to save after attempting to suspend job.")?;
         }
 
         Done { cancelled } => {
-            app.complete_current_job(cancelled);
+            app.complete_current_job(cancelled)?;
         }
 
         Resume { words } => {
             let pattern = words.join(" ");
-            app.resume_job_named(&pattern);
+            app.resume_job_named(&pattern)?;
         }
 
         Notifier { kill, become_id } => {
             if kill {
                 app.kill_notifier();
             } else if let Some(id_str) = become_id {
-                app.become_notifier(&id_str);
+                app.become_notifier(&id_str).context("Unable to start notifier process")?;
             } else {
                 app.spawn_notifier();
             }
         }
 
         Remind { force } => {
-            app.send_reminders(force);
+            app.send_reminders(force)?;
         }
 
         Ls => {
@@ -280,7 +302,7 @@ fn main() {
             } else if timebox.is_none() && !remove {
                 app.print_current_timebox();
             } else {
-                app.apply_timebox(timebox);
+                app.apply_timebox(timebox)?;
             }
         }
 
@@ -302,5 +324,37 @@ fn main() {
             let content = words.join(" ");
             app.add_log_note(content);
         }
+
+        Work { done } => {
+            let work_state = if done {
+                WorkState::Off
+            } else {
+                WorkState::Working
+            };
+            app.set_work_state(work_state)?;
+        }
     };
+
+    Ok(())
+}
+
+fn handle_error(error: anyhow::Error) {
+    let app_dir = dirs::data_local_dir()
+        .context("Could not locate current user's app data folder.")
+        .unwrap()
+        .join(".wyd");
+
+    fs::create_dir_all(&app_dir)
+        .context("Could not create application directory")
+        .unwrap();
+    
+    let mut error_log_file = OpenOptions::new()
+        .write(true)
+        .append(true)
+        .open(app_dir.join("wyd-error.log"))
+        .unwrap();
+
+    writeln!(error_log_file, "{:#}", error)
+        .context("Error attempting to write to error log")
+        .unwrap();
 }

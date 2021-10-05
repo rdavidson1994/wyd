@@ -25,18 +25,32 @@ pub struct SuspendedStack {
     pub last_notifiaction: Option<DateTime<Utc>>,
 }
 
+
+#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub enum WorkState {
+    Off,
+    Working,
+    SlackingSince(DateTime<Utc>)
+}
+
+impl Default for WorkState {
+    fn default() -> Self {
+        Self::Off
+    }
+}
+
 #[derive(Serialize, Deserialize, Clone, Default)]
 pub struct JobBoard {
-    // todo - private
+    pub work_state: WorkState,
     pub active_stack: JobStack,
-    // todo - private
-    pub suspended_stacks: Vec<SuspendedStack>,
+    pub suspended_stacks: Vec<SuspendedStack>,  
 }
 
 impl JobBoard {
     #[allow(dead_code)]
     fn empty() -> Self {
         JobBoard {
+            work_state: WorkState::Off,
             active_stack: default(),
             suspended_stacks: default(),
         }

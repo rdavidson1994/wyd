@@ -1,4 +1,4 @@
-use anyhow::{Result};
+use anyhow::{Context, Result, bail};
 use chrono::{DateTime, Duration, Local, Utc};
 use uuid::Uuid;
 
@@ -21,7 +21,7 @@ use url::Url;
 use std::io::BufReader;
 use rodio::{Decoder, OutputStream, source::Source};
 
-use crate::job::Job;
+use crate::{job::Job, job_board::WorkState};
 use crate::{
     job_board::{JobBoard, SuspendedStack},
     substring_matcher,
@@ -67,7 +67,7 @@ pub struct WydApplication {
 }
 
 impl WydApplication {
-    pub fn save(&self) {
+    pub fn save(&self) -> anyhow::Result<()> {
         // Create a backup copy of the jobs file before we overwrite it
         let copy_result = fs::copy(self.app_dir.join("jobs.ron"), self.current_backup_path());
 
@@ -78,20 +78,24 @@ impl WydApplication {
 
         // Serialize the current job board, and write the result into jobs.ron
         let new_file_text = ser::to_string_pretty(&self.job_board, PrettyConfig::new())
-            .expect("Attempt to reserialize updated job list failed.");
+            .context("Attempt to reserialize updated job list failed.")?;
         fs::write(self.app_dir.join("jobs.ron"), new_file_text)
-            .expect("Failed to write updated job list.");
+            .context("Failed to write updated job list.")?;
+
+        Ok(())
     }
 
-    pub fn load(app_dir: PathBuf) -> WydApplication {
+    pub fn load(app_dir: PathBuf) -> anyhow::Result<WydApplication> {
         let job_board = JobBoard::load(&app_dir);
-        let icon_url =
-            Url::from_file_path(app_dir.join("wyd-icon.png")).expect("Unable to load icon.");
-        WydApplication {
+        let icon_url = match Url::from_file_path(app_dir.join("wyd-icon.png")) {
+            Ok(url) => url,
+            Err(()) => bail!("Failed to create file url for icon."),
+        };
+        Ok(WydApplication {
             app_dir,
             job_board,
             icon_url,
-        }
+        })
     }
 
     fn print(&self, message: &str) {
@@ -159,7 +163,7 @@ impl WydApplication {
         label: String,
         timebox: Option<StdDuration>,
         retro: Option<StdDuration>,
-    ) {
+    ) -> anyhow::Result<()> {
         let begin_date = if let Some(retro) = retro {
             let dur =
                 Duration::from_std(retro).expect("Unable to convert duration to chrono format.");
@@ -180,7 +184,7 @@ impl WydApplication {
                 Finish the task or remove the timebox before \
                 Creating a sub task."
             );
-            return;
+            return Ok(());
         }
 
         let job = Job {
@@ -195,7 +199,8 @@ impl WydApplication {
         log_line.push_str(&format!("{}", job));
         self.print(&log_line);
         self.job_board.push(job);
-        self.save();
+        self.save().context("Unable to save after job creation.")?;
+        Ok(())
     }
 
     fn indent(&self, text: impl Display) -> String {
@@ -214,9 +219,10 @@ impl WydApplication {
         self.app_dir.join(".notifier")
     }
 
-    pub fn send_reminders(&mut self, force: bool) {
+    pub fn send_reminders(&mut self, force: bool) -> anyhow::Result<()> {
+        let mut needs_save = false;
         let mut timeboxes_expired = vec![];
-        for mut job in &mut self.job_board.active_stack {
+        for job in &mut self.job_board.active_stack {
             if job.timebox_expired() {
                 if !force && !should_notify(&job.last_notifiaction) {
                     continue;
@@ -224,6 +230,7 @@ impl WydApplication {
                 timeboxes_expired.push(job.label.clone());
 
                 job.last_notifiaction = Some(Utc::now());
+                needs_save = true;
             }
         }
 
@@ -261,16 +268,56 @@ impl WydApplication {
                 first_job_string, stack.reason
             ));
         }
-        self.save();
 
         for notification in notifications_to_send {
             create_notification(
                 "Timer!",
                 &notification
-            ).unwrap_or_else(|error| {
-                self.append_to_log(&format!("{:#}", error.context("Failed to send notification")))
+            ).context("Failed to send notification")
+            .unwrap_or_else(|error| {
+                self.append_to_log(&format!("{:#}", error))
             });
         }
+
+        let slack_date = match self.job_board.work_state {
+            WorkState::Off => None,
+            WorkState::Working => Some(Utc::now()),
+            WorkState::SlackingSince(date) => Some(date),
+        };
+
+        if let Some(slack_date) = slack_date {
+            let is_slacking = self.job_board.active_stack.iter().all(|job| {
+                job.timebox.is_none()
+            });
+            let new_work_state = if is_slacking {
+                let now = Utc::now();
+                if now.signed_duration_since(slack_date).num_seconds() > 5*60 {
+                    create_notification(
+                        "No timebox", "You should set a timebox so you can stay productive while working."
+                    ).context("Unable to send notification about missing timebox")
+                    .unwrap_or_else(|error| {
+                        self.append_to_log(&format!("{:#}", error))
+                    });
+                    WorkState::SlackingSince(now)
+                }
+                else {
+                    WorkState::SlackingSince(slack_date)
+                }
+                
+            } else {
+                WorkState::Working
+            };
+
+            if new_work_state != self.job_board.work_state {
+                needs_save = true;
+                self.job_board.work_state = new_work_state;
+            }
+
+        }
+        if needs_save {
+            self.save().context("Unable to save after sending reminders.")?;
+        }   
+        Ok(())
     }
 
     // CLI methods:
@@ -282,13 +329,12 @@ impl WydApplication {
             .expect("Unable to write to .notifier file.");
     }
 
-    pub fn become_notifier(mut self, id_str: &str) {
+    pub fn become_notifier(mut self, id_str: &str) -> anyhow::Result<()> {
         let lock_path = self.lock_path();
         let mut app_dir = self.app_dir;
         let mut id_buf = Vec::<u8>::with_capacity(4);
-        let mut seconds: u8 = 0;
         id_buf.extend(ron::from_str::<Uuid>(id_str).unwrap().as_bytes());
-        loop {
+        let never = loop {
             if lock_path.exists() {
                 let mut lock_file = OpenOptions::new().read(true).open(&lock_path).unwrap();
                 let mut file_bytes = Vec::<u8>::with_capacity(4);
@@ -297,15 +343,12 @@ impl WydApplication {
                     break;
                 }
             }
-            self = WydApplication::load(app_dir);
-            if seconds % 64 == 0 {
-                self.write_html();
-            }
-            self.send_reminders(false);
+            self = WydApplication::load(app_dir).context("Failed to deserialize application state")?;
+            self.send_reminders(false)?;
             app_dir = self.app_dir;
-            seconds = seconds.wrapping_add(1);
             std::thread::sleep(std::time::Duration::from_secs(1));
-        }
+        };
+        Ok(never)
     }
 
     pub fn spawn_notifier(&self) {
@@ -349,7 +392,7 @@ impl WydApplication {
         }
     }
 
-    pub fn apply_timebox(&mut self, timebox: Option<StdDuration>) {
+    pub fn apply_timebox(&mut self, timebox: Option<StdDuration>) -> anyhow::Result<()> {
         if let Some(job) = self.job_board.active_stack.last_mut() {
             job.timebox = timebox;
             match timebox {
@@ -370,10 +413,11 @@ impl WydApplication {
             // just applied is measured from now
             job.begin_date = Utc::now();
 
-            self.save();
+            self.save().context("Unable to save after applying timebox.")?;
         } else {
             println!("No active job to apply timebox to.");
         }
+        Ok(())
     }
 
     pub fn print_current_timebox(&self) {
@@ -411,7 +455,7 @@ impl WydApplication {
         }
     }
 
-    pub fn resume_job_named(&mut self, pattern: &str) {
+    pub fn resume_job_named(&mut self, pattern: &str) -> anyhow::Result<()> {
         let outcome = if pattern.is_empty() {
             self.job_board.resume_at_index(0)
         } else {
@@ -423,10 +467,11 @@ impl WydApplication {
         } else {
             eprintln!("No matching job to resume.");
         }
-        self.save();
+        self.save().context("Unable to save after resuming job")?;
+        Ok(())
     }
 
-    pub fn complete_current_job(&mut self, cancelled: bool) {
+    pub fn complete_current_job(&mut self, cancelled: bool) -> anyhow::Result<()> {
         match self.job_board.pop() {
             Some(job) => {
                 let duration = Local::now().signed_duration_since(job.begin_date);
@@ -448,10 +493,12 @@ impl WydApplication {
                 } else {
                     print!("{}", self.job_board.get_summary())
                 }
-                self.save();
+                self.save().context("Unable to save after completing job")?;
+                Ok(())
             }
             None => {
-                print!("{}", self.job_board.empty_stack_message())
+                print!("{}", self.job_board.empty_stack_message());
+                Ok(())
             }
         }
     }
@@ -460,6 +507,7 @@ impl WydApplication {
         self.job_board.get_summary()
     }
 
+    #[allow(dead_code)]
     pub fn write_html(&mut self) {
         let output = self.job_board.generate_html();
         match fs::write(self.app_dir.join("wyd-homepage.html"), output) {
@@ -481,5 +529,11 @@ impl WydApplication {
     pub fn add_log_note(&self, content: String) -> () {
         let formatted_content = self.indent(self.timestamp(content));
         self.append_to_log(&(formatted_content + "\n"))
+    }
+
+    pub fn set_work_state(&mut self, work_state: WorkState) -> anyhow::Result<()> {
+        self.job_board.work_state = work_state;
+        self.save().context("Unable to save after setting work state.")?;
+        Ok(())
     }
 }
