@@ -2,13 +2,13 @@ use chrono::{serde::ts_seconds, DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
 use std::time::Duration as StdDuration;
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Job {
     pub label: String,
     #[serde(with = "ts_seconds")]
     pub begin_date: DateTime<Utc>,
     pub timebox: Option<StdDuration>,
-    pub last_notifiaction: Option<DateTime<Utc>>,
+    pub last_notification: Option<DateTime<Utc>>,
 }
 
 impl Job {

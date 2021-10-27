@@ -4,7 +4,7 @@ use chrono_english::Dialect;
 use std::{fmt::Display, fs::{self, OpenOptions}, io::Write, thread, time::Duration as StdDuration};
 
 extern crate clap;
-use clap::{crate_version, AppSettings, ArgSettings, Clap};
+use clap::{crate_version, AppSettings, ArgSettings, Parser};
 
 use std::default::Default;
 
@@ -72,7 +72,7 @@ fn parse_date_or_dur(input: &str) -> anyhow::Result<StdDuration> {
     Ok(dur.to_std()?)
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 //     let matches = App::new("What You're Doing")
 //         .version(crate_version!())
 //         .settings(&[AppSettings::InferSubcommands])
@@ -189,7 +189,7 @@ enum Command {
     }
 }
 
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(name = "What You're Doing")]
 #[clap(version = crate_version!())]
 #[clap(setting = AppSettings::InferSubcommands)]
@@ -284,8 +284,9 @@ fn perform_work() -> anyhow::Result<()> {
             }
         }
 
-        Remind { force } => {
-            app.send_reminders(force)?;
+        Remind { force: _ } => {
+            app.update_timers()?;
+            app.save().context("Unable to save after attempting to update timers.")?;
         }
 
         Ls => {

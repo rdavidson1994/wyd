@@ -26,7 +26,7 @@ pub struct SuspendedStack {
 }
 
 
-#[derive(Serialize, Deserialize, Clone, Eq, PartialEq)]
+#[derive(Serialize, Deserialize, Clone, Copy, Eq, PartialEq, Debug)]
 pub enum WorkState {
     Off,
     Working,

@@ -27,6 +27,11 @@ use crate::{
     substring_matcher,
 };
 
+pub struct TimerState {
+    needs_save: bool,
+    send_alarm: bool
+}
+
 fn should_notify(last_notified: &Option<DateTime<Utc>>) -> bool {
     // We only send one notification to avoid spam.
     // Later, we can think about sequence of contingency notifications,
@@ -42,15 +47,7 @@ fn should_notify(last_notified: &Option<DateTime<Utc>>) -> bool {
     }
 }
 
-fn create_notification(_summary: &str, _body: &str) -> Result<()> {
-    // Notification::new()
-    //     .summary(summary)
-    //     .body(body)
-    //     .timeout(0)
-    //     .appname("wyd");
-        // .show()
-        // .context("Unable to show notification")?;
-
+fn play_alarm() -> Result<()> {
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
     let file = BufReader::new(File::open(r"C:\Windows\Media\Alarm01.wav").unwrap());
     let source = Decoder::new(file).unwrap();
@@ -59,12 +56,14 @@ fn create_notification(_summary: &str, _body: &str) -> Result<()> {
     Ok(())
 }
 
+
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct WydApplication {
     job_board: JobBoard,
     app_dir: PathBuf,
     icon_url: Url,
 }
+
 
 impl WydApplication {
     pub fn save(&self) -> anyhow::Result<()> {
@@ -146,7 +145,7 @@ impl WydApplication {
             label,
             begin_date: Utc::now(),
             timebox: None,
-            last_notifiaction: None,
+            last_notification: None,
         };
         let new_stack = SuspendedStack {
             data: vec![job],
@@ -191,7 +190,7 @@ impl WydApplication {
             label,
             begin_date,
             timebox,
-            last_notifiaction: None,
+            last_notification: None,
         };
 
         let mut log_line = String::new();
@@ -219,31 +218,17 @@ impl WydApplication {
         self.app_dir.join(".notifier")
     }
 
-    pub fn send_reminders(&mut self, force: bool) -> anyhow::Result<()> {
-        let mut needs_save = false;
-        let mut timeboxes_expired = vec![];
+    pub fn update_timers(&mut self) -> anyhow::Result<TimerState> {
         for job in &mut self.job_board.active_stack {
             if job.timebox_expired() {
-                if !force && !should_notify(&job.last_notifiaction) {
+                if !should_notify(&job.last_notification) {
                     continue;
                 }
-                timeboxes_expired.push(job.label.clone());
-
-                job.last_notifiaction = Some(Utc::now());
-                needs_save = true;
+                
+                job.last_notification = Some(Utc::now());
+                return Ok(TimerState{ send_alarm: true, needs_save: true});
             }
         }
-
-        for job_name in timeboxes_expired {
-            create_notification(
-                "Expired timebox",
-                &format!("The timebox for task \"{}\" has expired.", job_name),
-            ).unwrap_or_else(|error| {
-                self.append_to_log(&format!("{:#}", error.context("Failed to send notification")))
-            });
-        }
-
-        let mut notifications_to_send = vec![];
 
         for stack in &mut self.job_board.suspended_stacks {
             let timer_exhausted = match stack.timer {
@@ -253,30 +238,11 @@ impl WydApplication {
             if !timer_exhausted {
                 continue;
             }
-            if !force && !should_notify(&stack.last_notifiaction) {
+            if !should_notify(&stack.last_notifiaction) {
                 continue;
             }
-
-            let first_job_string = match stack.data.first() {
-                Some(job) => job.to_string(),
-                None => "[[Empty Job Stack D:]]".to_string(),
-            };
-
-            notifications_to_send.push(format!(
-                "Reminder about this suspended task\
-                : \"{}\".\nSuspension reason: \"{}\"",
-                first_job_string, stack.reason
-            ));
-        }
-
-        for notification in notifications_to_send {
-            create_notification(
-                "Timer!",
-                &notification
-            ).context("Failed to send notification")
-            .unwrap_or_else(|error| {
-                self.append_to_log(&format!("{:#}", error))
-            });
+            stack.last_notifiaction = Some(Utc::now());
+            return Ok(TimerState{ send_alarm: true, needs_save: true});
         }
 
         let slack_date = match self.job_board.work_state {
@@ -286,38 +252,32 @@ impl WydApplication {
         };
 
         if let Some(slack_date) = slack_date {
+            let mut timer_state = TimerState{ send_alarm: false, needs_save: false};
             let is_slacking = self.job_board.active_stack.iter().all(|job| {
                 job.timebox.is_none()
             });
             let new_work_state = if is_slacking {
                 let now = Utc::now();
                 if now.signed_duration_since(slack_date).num_seconds() > 5*60 {
-                    create_notification(
-                        "No timebox", "You should set a timebox so you can stay productive while working."
-                    ).context("Unable to send notification about missing timebox")
-                    .unwrap_or_else(|error| {
-                        self.append_to_log(&format!("{:#}", error))
-                    });
+                    timer_state.send_alarm = true;
                     WorkState::SlackingSince(now)
                 }
                 else {
                     WorkState::SlackingSince(slack_date)
                 }
-                
             } else {
                 WorkState::Working
             };
 
             if new_work_state != self.job_board.work_state {
-                needs_save = true;
                 self.job_board.work_state = new_work_state;
+                timer_state.needs_save = true;
             }
 
+            return Ok(timer_state);
         }
-        if needs_save {
-            self.save().context("Unable to save after sending reminders.")?;
-        }   
-        Ok(())
+
+        return Ok(TimerState{ send_alarm: false, needs_save: false});    
     }
 
     // CLI methods:
@@ -334,7 +294,7 @@ impl WydApplication {
         let mut app_dir = self.app_dir;
         let mut id_buf = Vec::<u8>::with_capacity(4);
         id_buf.extend(ron::from_str::<Uuid>(id_str).unwrap().as_bytes());
-        let never = loop {
+        loop {
             if lock_path.exists() {
                 let mut lock_file = OpenOptions::new().read(true).open(&lock_path).unwrap();
                 let mut file_bytes = Vec::<u8>::with_capacity(4);
@@ -344,11 +304,17 @@ impl WydApplication {
                 }
             }
             self = WydApplication::load(app_dir).context("Failed to deserialize application state")?;
-            self.send_reminders(false)?;
+            let timer_state = self.update_timers()?;
+            if timer_state.needs_save {
+                self.save().context("Unable to save from reminder thread.")?;
+            }
+            if timer_state.send_alarm {
+                play_alarm().context("Unable to play alarm sound")?;
+            }
             app_dir = self.app_dir;
             std::thread::sleep(std::time::Duration::from_secs(1));
         };
-        Ok(never)
+        Ok(())
     }
 
     pub fn spawn_notifier(&self) {
