@@ -47,10 +47,22 @@ fn should_notify(last_notified: &Option<DateTime<Utc>>) -> bool {
     }
 }
 
+// fn play_alarm() -> Result<()> {
+//     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
+//     let file = BufReader::new(File::open(r"C:\Windows\Media\Alarm01.wav").unwrap());
+//     let source = Decoder::new(file).unwrap();
+//     stream_handle.play_raw(source.convert_samples())?;
+//     std::thread::sleep(std::time::Duration::from_secs(5));
+//     Ok(())
+// }
+
 fn play_alarm() -> Result<()> {
     let (_stream, stream_handle) = OutputStream::try_default().unwrap();
-    let file = BufReader::new(File::open(r"C:\Windows\Media\Alarm01.wav").unwrap());
-    let source = Decoder::new(file).unwrap();
+    let audio_bytes : &[u8] = include_bytes!("audio/bell.wav");
+    //let file = BufReader::new((&include_bytes!("audio/bell.wav").read_u8()));//BufReader::new(File::open(r"C:\Windows\Media\Alarm01.wav").unwrap());
+    let cursor = std::io::Cursor::new(audio_bytes);
+    let reader = BufReader::new(cursor);
+    let source = Decoder::new(reader).unwrap();
     stream_handle.play_raw(source.convert_samples())?;
     std::thread::sleep(std::time::Duration::from_secs(5));
     Ok(())

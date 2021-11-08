@@ -1,0 +1,4 @@
+In addition to the free software dependencies listed in Cargo.toml, this
+application includes the following freely-licensed works:
+
+src/audio/bell.wav: https://freesound.org/people/juskiddink/sounds/68261/
